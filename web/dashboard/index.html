@@ -80,6 +80,12 @@
   .mod-field .k { display:block; font-size:12px; color:var(--tx1); margin-bottom:4px; }
   nav button.btn-ghost, button.btn-ghost { background:transparent; color:var(--acc1);
     border:1px solid var(--bg3); }
+  .scan-busy { display:flex; align-items:center; gap:12px; padding:16px 0;
+    color:var(--tx1); font-size:14px; }
+  .spinner { width:22px; height:22px; border:2px solid var(--bg3);
+    border-top-color:var(--acc1); border-radius:50%;
+    animation:spin .75s linear infinite; flex-shrink:0; }
+  @keyframes spin { to { transform:rotate(360deg); } }
   .full { grid-column:1/-1; }
   button { background:var(--acc0); color:var(--bg0); border:none;
     border-radius:8px; padding:10px 16px; font-weight:600; cursor:pointer;
@@ -613,9 +619,20 @@ document.querySelectorAll(".mod-subnav button").forEach(btn => {
   btn.onclick = () => setModSubPane(btn.dataset.modpane);
 });
 
+function showScanBusy(outId, btnId, message) {
+  if (btnId && $(btnId)) $(btnId).disabled = true;
+  $(outId).innerHTML =
+    '<div class="scan-busy"><div class="spinner" aria-hidden="true"></div>' +
+    '<span>' + (message || "Scanning…") + '</span></div>';
+}
+
+function clearScanBusy(btnId) {
+  if (btnId && $(btnId)) $(btnId).disabled = false;
+}
+
 async function runWifiScan() {
   const band = $("wifiScanBand").value;
-  $("wifiScanOut").innerHTML = '<div class="muted">Scanning…</div>';
+  showScanBusy("wifiScanOut", "wifiScanBtn", "Scanning WiFi…");
   try {
     const d = await fetch("/api/v1/wifi/scan?band=" + encodeURIComponent(band))
       .then(r => r.json());
@@ -631,11 +648,13 @@ async function runWifiScan() {
       ).join("") + '</table>';
   } catch (e) {
     $("wifiScanOut").innerHTML = '<div class="muted">Scan failed.</div>';
+  } finally {
+    clearScanBusy("wifiScanBtn");
   }
 }
 
 async function runI2cScan() {
-  $("i2cScanOut").innerHTML = '<div class="muted">Scanning…</div>';
+  showScanBusy("i2cScanOut", "i2cScanBtn", "Scanning I2C bus…");
   try {
     const d = await api("i2c/scan");
     if (!d.addresses || !d.addresses.length) {
@@ -647,6 +666,8 @@ async function runI2cScan() {
     ).join("");
   } catch (e) {
     $("i2cScanOut").innerHTML = '<div class="muted">Scan failed.</div>';
+  } finally {
+    clearScanBusy("i2cScanBtn");
   }
 }
 

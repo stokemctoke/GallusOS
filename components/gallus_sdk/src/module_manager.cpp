@@ -55,6 +55,13 @@ bool ModuleManager::isEnabled(const char* name) const {
     return ctx_.config.getBool(kModulesNs, name, true);
 }
 
+bool ModuleManager::autoStart(const char* name) const {
+    if (name == nullptr) {
+        return true;
+    }
+    return ctx_.config.getBool(name, "auto_start", true);
+}
+
 void ModuleManager::destroyInstance(Entry& entry) {
     if (entry.instance == nullptr) {
         return;
@@ -175,6 +182,10 @@ Status ModuleManager::startAll() {
         Entry& entry = entries_[i];
         if (entry.state != State::Initialized &&
             entry.state != State::Stopped) {
+            continue;
+        }
+        if (!autoStart(entry.info->name)) {
+            Log::info(kTag, "%s — idle (auto_start=false)", entry.info->name);
             continue;
         }
         const Status status = startOne(entry);

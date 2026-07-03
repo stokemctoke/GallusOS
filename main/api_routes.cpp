@@ -177,6 +177,8 @@ esp_err_t modulesHandler(httpd_req_t* req) {
             row, "state", sdk::ModuleManager::stateName(entry.state));
         cJSON_AddBoolToObject(row, "enabled",
                               ctx->modules->isEnabled(entry.info->name));
+        cJSON_AddBoolToObject(row, "auto_start",
+                              ctx->modules->autoStart(entry.info->name));
         cJSON_AddStringToObject(row, "menu_icon", entry.info->menu_icon);
         cJSON_AddItemToArray(list, row);
     }
@@ -196,11 +198,11 @@ bool isValidModuleName(const char* name) {
     return true;
 }
 
-bool parseModuleActionUri(const char* uri, const char* action, char* name,
-                          size_t name_cap) {
+bool parseModulePostUri(const char* uri, char* name, size_t name_cap, char* action,
+                        size_t action_cap) {
     static constexpr const char* kPrefix = "/api/v1/modules/";
-    if (uri == nullptr || action == nullptr || name == nullptr ||
-        name_cap == 0) {
+    if (uri == nullptr || name == nullptr || action == nullptr ||
+        name_cap == 0 || action_cap == 0) {
         return false;
     }
     const size_t prefix_len = strlen(kPrefix);
@@ -221,7 +223,18 @@ bool parseModuleActionUri(const char* uri, const char* action, char* name,
     if (!isValidModuleName(name)) {
         return false;
     }
-    return strcmp(slash + 1, action) == 0;
+
+    const char* action_text = slash + 1;
+    if (action_text[0] == '\0') {
+        return false;
+    }
+    if (strlen(action_text) >= action_cap) {
+        return false;
+    }
+    snprintf(action, action_cap, "%s", action_text);
+
+    return strcmp(action, "start") == 0 || strcmp(action, "stop") == 0 ||
+           strcmp(action, "enable") == 0 || strcmp(action, "disable") == 0;
 }
 
 esp_err_t sendModuleActionResult(httpd_req_t* req, Status status,
@@ -244,36 +257,31 @@ esp_err_t sendModuleActionResult(httpd_req_t* req, Status status,
     return sendJson(req, doc);
 }
 
-esp_err_t moduleActionHandler(httpd_req_t* req, const char* action,
-                              Status (sdk::ModuleManager::*fn)(const char*)) {
+esp_err_t modulePostHandler(httpd_req_t* req) {
     auto* ctx = static_cast<ApiContext*>(req->user_ctx);
     if (!ctx->rest->authorize(req)) {
         return ESP_OK;
     }
 
     char name[24] = {};
-    if (!parseModuleActionUri(req->uri, action, name, sizeof(name))) {
+    char action[16] = {};
+    if (!parseModulePostUri(req->uri, name, sizeof(name), action,
+                            sizeof(action))) {
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "unknown route");
     }
 
-    const Status status = (ctx->modules->*fn)(name);
+    Status status = Error::InvalidArg;
+    if (strcmp(action, "start") == 0) {
+        status = ctx->modules->start(name);
+    } else if (strcmp(action, "stop") == 0) {
+        status = ctx->modules->stop(name);
+    } else if (strcmp(action, "enable") == 0) {
+        status = ctx->modules->enable(name);
+    } else if (strcmp(action, "disable") == 0) {
+        status = ctx->modules->disable(name);
+    }
+
     return sendModuleActionResult(req, status, name, action);
-}
-
-esp_err_t moduleStartHandler(httpd_req_t* req) {
-    return moduleActionHandler(req, "start", &sdk::ModuleManager::start);
-}
-
-esp_err_t moduleStopHandler(httpd_req_t* req) {
-    return moduleActionHandler(req, "stop", &sdk::ModuleManager::stop);
-}
-
-esp_err_t moduleEnableHandler(httpd_req_t* req) {
-    return moduleActionHandler(req, "enable", &sdk::ModuleManager::enable);
-}
-
-esp_err_t moduleDisableHandler(httpd_req_t* req) {
-    return moduleActionHandler(req, "disable", &sdk::ModuleManager::disable);
 }
 
 esp_err_t batteryHandler(httpd_req_t* req) {
@@ -691,10 +699,8 @@ esp_err_t endpointsHandler(httpd_req_t* req) {
         {"GET", "/api/v1/system", "System information"},
         {"GET", "/api/v1/gpio", "GPIO reservation snapshot"},
         {"GET", "/api/v1/modules", "Loaded modules"},
-        {"POST", "/api/v1/modules/<name>/start", "Start one module"},
-        {"POST", "/api/v1/modules/<name>/stop", "Stop one module"},
-        {"POST", "/api/v1/modules/<name>/enable", "Enable one module"},
-        {"POST", "/api/v1/modules/<name>/disable", "Disable one module"},
+        {"POST", "/api/v1/modules/<name>/{start|stop|enable|disable}",
+         "Module lifecycle control"},
         {"GET", "/api/v1/battery", "Battery voltage and percentage"},
         {"GET", "/api/v1/diagnostics", "Heap, tasks, event bus stats"},
         {"GET", "/api/v1/files/list?path=/fs", "List directory entries"},
@@ -739,23 +745,8 @@ Status registerApiRoutes(ApiContext& ctx) {
     if (!status.ok()) {
         return status;
     }
-    status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/modules/*/start",
-                                     &moduleStartHandler, &ctx);
-    if (!status.ok()) {
-        return status;
-    }
-    status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/modules/*/stop",
-                                     &moduleStopHandler, &ctx);
-    if (!status.ok()) {
-        return status;
-    }
-    status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/modules/*/enable",
-                                     &moduleEnableHandler, &ctx);
-    if (!status.ok()) {
-        return status;
-    }
-    status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/modules/*/disable",
-                                     &moduleDisableHandler, &ctx);
+    status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/modules/*",
+                                     &modulePostHandler, &ctx);
     if (!status.ok()) {
         return status;
     }

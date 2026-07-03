@@ -26,12 +26,17 @@ gallus::services::WifiService::ScanBand parseBand(const char* text) {
 class WifiScanModule : public gallus::sdk::Module {
 public:
     gallus::Status start() override {
-        period_ms_ = ctx().config.getInt("wifi_scan", "period_ms", 60000);
+        period_ms_ = ctx().config.getInt("wifi_scan", "period_ms", 0);
 
         char band_text[8] = {};
         (void)ctx().config.getString("wifi_scan", "band", band_text,
                                      sizeof(band_text), "both");
         band_ = parseBand(band_text);
+
+        if (period_ms_ <= 0) {
+            gallus::Log::info(kTag, "ready — on-demand (period_ms=0)");
+            return gallus::Status::success();
+        }
 
         auto job = ctx().scheduler.every(
             static_cast<uint32_t>(period_ms_), &WifiScanModule::tick, this,
@@ -44,8 +49,10 @@ public:
     }
 
     gallus::Status stop() override {
-        (void)ctx().scheduler.cancel(job_);
-        job_ = {};
+        if (job_.valid()) {
+            (void)ctx().scheduler.cancel(job_);
+            job_ = {};
+        }
         return gallus::Status::success();
     }
 
@@ -80,7 +87,7 @@ private:
     }
 
     gallus::JobHandle job_;
-    int32_t period_ms_ = 60000;
+    int32_t period_ms_ = 0;
     gallus::services::WifiService::ScanBand band_ =
         gallus::services::WifiService::ScanBand::Both;
 };

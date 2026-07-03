@@ -354,12 +354,19 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | 9 | Host simulation (kernel harness, mock services, hello_world) | Done |
 | 10 | SDK CLI polish, GitHub release, wifi_scan, module API freeze | Done |
 | 11 | Module runtime control, wifi_scan fixes, REST explorer POST | Done |
+| 12 | Modules dashboard tab, on-demand diagnostics, module POST route fix | Done |
 
 | Version | Value |
 |---|---|
 | Firmware | 0.1.0 |
 | REST API | v1 |
 | Module API | v1 (frozen — see [docs/MODULE_API.md](docs/MODULE_API.md)) |
+
+### Phase 12 additions
+
+- **Modules dashboard tab** — start/stop/enable/disable, module-specific controls (WiFi scan, I2C scan, system info)
+- **On-demand diagnostics** — `auto_start: false` and `period_ms: 0` defaults for survey modules; demo modules still auto-start
+- **Module POST routes** — single `/api/v1/modules/*` handler (ESP-IDF wildcard must be trailing)
 
 ### Phase 11 additions
 

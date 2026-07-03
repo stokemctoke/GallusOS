@@ -1,5 +1,6 @@
 {
   "i2c_scanner": {
-    "period_ms": 30000
+    "auto_start": false,
+    "period_ms": 0
   }
 }

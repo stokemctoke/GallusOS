@@ -51,6 +51,26 @@
   .pill { font-size:11px; padding:2px 8px; border-radius:10px;
     background:var(--bg3); color:var(--tx1); }
   .pill.started { background:var(--acc3); color:var(--tx0); }
+  .pill.stopped { background:var(--bg3); color:var(--tx1); }
+  .pill.disabled { background:var(--bg0); color:var(--tx2); }
+  .pill.failed { background:#5c1a1a; color:#ffb4b4; }
+  button.btn-sm { padding:6px 10px; font-size:12px; }
+  button.btn-ghost { background:transparent; color:var(--acc1);
+    border:1px solid var(--bg3); }
+  button.btn-ghost:disabled { opacity:.4; }
+  .mod-row { display:grid; grid-template-columns:1fr auto;
+    gap:8px; align-items:center; padding:10px 0;
+    border-bottom:1px solid var(--bg3); cursor:pointer; }
+  .mod-row:last-child { border-bottom:none; }
+  .mod-row.selected { background:var(--bg3); margin:0 -8px; padding:10px 8px;
+    border-radius:8px; }
+  .mod-meta { font-size:12px; color:var(--tx1); margin-top:2px; }
+  .mod-actions { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .mod-detail-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+    margin:12px 0; }
+  .mod-detail-tools select { width:auto; min-width:7rem; }
+  .chip { display:inline-block; font-size:12px; padding:4px 10px; margin:4px 4px 0 0;
+    border-radius:999px; background:var(--bg3); font-family:ui-monospace,monospace; }
   .full { grid-column:1/-1; }
   button { background:var(--acc0); color:var(--bg0); border:none;
     border-radius:8px; padding:10px 16px; font-weight:600; cursor:pointer;
@@ -87,6 +107,7 @@
 
 <nav>
   <button class="active" data-tab="dash">Dashboard</button>
+  <button data-tab="modules">Modules</button>
   <button data-tab="diag">Diagnostics</button>
   <button data-tab="files">Filesystem</button>
   <button data-tab="api">REST Explorer</button>
@@ -121,6 +142,10 @@
   <div class="card modules full">
     <h2>Modules</h2>
     <div id="modules"></div>
+    <div class="muted" style="margin-top:8px">
+      <span class="linkish" onclick="switchTab('modules')">Open Modules tab</span>
+      to start, stop, and run on-demand tools.
+    </div>
   </div>
 
   <div class="card full">
@@ -131,6 +156,24 @@
     </div>
     <div class="bar"><i id="otabar"></i></div>
     <div class="muted" id="otamsg">Select a .bin firmware image to update over the air.</div>
+  </div>
+</section>
+
+<section id="panel-modules" class="panel">
+  <div class="card full">
+    <h2>Loaded modules</h2>
+    <p class="muted" style="margin:0 0 12px">
+      Diagnostic modules stay idle at boot. Start one when you need it, use the
+      controls below, then Stop when done.
+    </p>
+    <div id="modList"></div>
+    <div class="muted" id="modMsg" style="margin-top:10px"></div>
+  </div>
+  <div class="card full">
+    <h2 id="modDetailTitle">Module controls</h2>
+    <div id="modDetail">
+      <p class="muted">Select a module above.</p>
+    </div>
   </div>
 </section>
 
@@ -286,6 +329,220 @@ function renderModules(mods) {
     ' &middot; ' + m.category + '</span></div>').join("");
 }
 
+let moduleCatalog = [];
+let selectedModule = null;
+
+function switchTab(tab) {
+  document.querySelectorAll("nav button").forEach(b => {
+    b.classList.toggle("active", b.dataset.tab === tab);
+  });
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  $("panel-" + tab).classList.add("active");
+  if (tab === "diag") loadDiagnostics();
+  if (tab === "files") loadFiles("/fs");
+  if (tab === "api") loadEndpoints();
+  if (tab === "settings") loadSettings();
+  if (tab === "config") loadConfigTab();
+  if (tab === "modules") loadModulesTab();
+}
+
+async function postModule(name, action) {
+  const r = await fetch("/api/v1/modules/" + encodeURIComponent(name) + "/" + action,
+    { method: "POST" });
+  const text = await r.text();
+  let body;
+  try { body = JSON.parse(text); } catch (e) { body = { error: text }; }
+  if (!r.ok) throw new Error(body.error || text || ("HTTP " + r.status));
+  return body;
+}
+
+function setModMsg(text) { $("modMsg").textContent = text || ""; }
+
+async function moduleAction(name, action, ev) {
+  if (ev) ev.stopPropagation();
+  setModMsg(action.charAt(0).toUpperCase() + action.slice(1) + " " + name + "…");
+  try {
+    await postModule(name, action);
+    setModMsg("");
+    await loadModulesTab();
+    refresh();
+  } catch (e) {
+    setModMsg(e.message || "Request failed.");
+  }
+}
+
+function selectModule(name) {
+  selectedModule = name;
+  renderModuleList();
+  renderModuleDetail();
+}
+
+function runningModule(mod) {
+  return mod && mod.enabled && mod.state === "started";
+}
+
+function renderModuleList() {
+  if (!moduleCatalog.length) {
+    $("modList").innerHTML = '<div class="muted">No modules loaded.</div>';
+    return;
+  }
+  $("modList").innerHTML = moduleCatalog.map(m => {
+    const sel = m.name === selectedModule ? " selected" : "";
+    const startDisabled = !m.enabled || m.state === "started" ||
+      m.state === "failed" || m.state === "disabled";
+    const stopDisabled = !m.enabled || m.state !== "started";
+    return '<div class="mod-row' + sel + '" onclick="selectModule(\'' +
+      m.name + '\')">' +
+      '<div><div><b>' + m.name + '</b> <span class="pill ' + m.state + '">' +
+      m.state + '</span></div>' +
+      '<div class="mod-meta">' + m.category + ' &middot; v' + m.version +
+      (m.auto_start ? ' &middot; auto-start' : ' &middot; on-demand') +
+      (m.enabled ? '' : ' &middot; disabled') + '</div>' +
+      '<div class="mod-meta">' + (m.description || '') + '</div></div>' +
+      '<div class="mod-actions">' +
+      '<button class="btn-sm btn-ghost" onclick="moduleAction(\'' + m.name +
+      '\',\'enable\',event)"' + (m.enabled ? ' disabled' : '') +
+      '>Enable</button>' +
+      '<button class="btn-sm btn-ghost" onclick="moduleAction(\'' + m.name +
+      '\',\'disable\',event)"' + (!m.enabled ? ' disabled' : '') +
+      '>Disable</button>' +
+      '<button class="btn-sm" onclick="moduleAction(\'' + m.name +
+      '\',\'start\',event)"' + (startDisabled ? ' disabled' : '') +
+      '>Start</button>' +
+      '<button class="btn-sm btn-ghost" onclick="moduleAction(\'' + m.name +
+      '\',\'stop\',event)"' + (stopDisabled ? ' disabled' : '') +
+      '>Stop</button></div></div>';
+  }).join("");
+}
+
+function renderModuleDetail() {
+  const mod = moduleCatalog.find(m => m.name === selectedModule);
+  if (!mod) {
+    $("modDetailTitle").textContent = "Module controls";
+    $("modDetail").innerHTML = '<p class="muted">Select a module above.</p>';
+    return;
+  }
+  $("modDetailTitle").textContent = mod.name;
+
+  if (!mod.enabled) {
+    $("modDetail").innerHTML = '<p class="muted">Module is disabled. Click Enable to load it.</p>';
+    return;
+  }
+  if (mod.state !== "started") {
+    $("modDetail").innerHTML =
+      '<p class="muted">' + (mod.description || '') + '</p>' +
+      '<p class="muted" style="margin-top:12px">Click <b>Start</b> to activate this module and show its controls.</p>';
+    return;
+  }
+
+  if (mod.name === "wifi_scan") {
+    $("modDetail").innerHTML =
+      '<p class="muted">Scan nearby WiFi networks on demand (does not run in the background when period_ms is 0).</p>' +
+      '<div class="mod-detail-tools">' +
+      '<select id="wifiScanBand"><option value="both">Both bands</option>' +
+      '<option value="2">2.4 GHz</option><option value="5">5 GHz</option></select>' +
+      '<button id="wifiScanBtn">Scan now</button></div>' +
+      '<div id="wifiScanOut"></div>';
+    $("wifiScanBtn").onclick = runWifiScan;
+    return;
+  }
+  if (mod.name === "i2c_scanner") {
+    $("modDetail").innerHTML =
+      '<p class="muted">Probe the I2C bus for responding devices.</p>' +
+      '<div class="mod-detail-tools"><button id="i2cScanBtn">Scan now</button></div>' +
+      '<div id="i2cScanOut"></div>';
+    $("i2cScanBtn").onclick = runI2cScan;
+    return;
+  }
+  if (mod.name === "system_info") {
+    $("modDetail").innerHTML =
+      '<p class="muted">Logs heap and scheduler stats on an interval when period_ms &gt; 0. Fetch a snapshot below.</p>' +
+      '<div class="mod-detail-tools"><button id="sysInfoBtn">Refresh snapshot</button></div>' +
+      '<pre id="sysInfoOut" class="muted" style="margin-top:8px;white-space:pre-wrap"></pre>';
+    $("sysInfoBtn").onclick = runSystemInfoSnapshot;
+    return;
+  }
+  if (mod.name === "gpio_blink") {
+    $("modDetail").innerHTML =
+      '<p class="muted">Toggles the user LED on a schedule while this module is started.</p>';
+    return;
+  }
+  if (mod.name === "hello_world") {
+    $("modDetail").innerHTML =
+      '<p class="muted">Logs a greeting and periodic heartbeat while started.</p>';
+    return;
+  }
+  $("modDetail").innerHTML = '<p class="muted">' + (mod.description || "No extra controls for this module.") + '</p>';
+}
+
+async function loadModulesTab() {
+  try {
+    const d = await api("modules");
+    moduleCatalog = d.modules || [];
+    if (selectedModule && !moduleCatalog.some(m => m.name === selectedModule)) {
+      selectedModule = null;
+    }
+    if (!selectedModule && moduleCatalog.length) {
+      selectedModule = moduleCatalog[0].name;
+    }
+    renderModuleList();
+    renderModuleDetail();
+  } catch (e) {
+    $("modList").innerHTML = '<div class="muted">Failed to load modules.</div>';
+  }
+}
+
+async function runWifiScan() {
+  const band = $("wifiScanBand").value;
+  $("wifiScanOut").innerHTML = '<div class="muted">Scanning…</div>';
+  try {
+    const d = await fetch("/api/v1/wifi/scan?band=" + encodeURIComponent(band))
+      .then(r => r.json());
+    if (!d.networks || !d.networks.length) {
+      $("wifiScanOut").innerHTML = '<div class="muted">No networks found.</div>';
+      return;
+    }
+    $("wifiScanOut").innerHTML =
+      '<table><tr><th>SSID</th><th>RSSI</th><th>Ch</th><th>Band</th></tr>' +
+      d.networks.map(n =>
+        '<tr><td>' + (n.ssid || "(hidden)") + '</td><td>' + n.rssi +
+        '</td><td>' + n.channel + '</td><td>' + n.band_ghz + ' GHz</td></tr>'
+      ).join("") + '</table>';
+  } catch (e) {
+    $("wifiScanOut").innerHTML = '<div class="muted">Scan failed.</div>';
+  }
+}
+
+async function runI2cScan() {
+  $("i2cScanOut").innerHTML = '<div class="muted">Scanning…</div>';
+  try {
+    const d = await api("i2c/scan");
+    if (!d.addresses || !d.addresses.length) {
+      $("i2cScanOut").innerHTML = '<div class="muted">No devices found.</div>';
+      return;
+    }
+    $("i2cScanOut").innerHTML = d.addresses.map(a =>
+      '<span class="chip">0x' + a.toString(16).toUpperCase().padStart(2, "0") + '</span>'
+    ).join("");
+  } catch (e) {
+    $("i2cScanOut").innerHTML = '<div class="muted">Scan failed.</div>';
+  }
+}
+
+async function runSystemInfoSnapshot() {
+  $("sysInfoOut").textContent = "Loading…";
+  try {
+    const d = await api("diagnostics");
+    $("sysInfoOut").textContent =
+      "heap free=" + d.heap.free + " min=" + d.heap.min_free +
+      "\nevents delivered=" + (d.events ? d.events.delivered : "-") +
+      " dropped=" + (d.events ? d.events.dropped : "-") +
+      "\nscheduler jobs=" + (d.scheduler ? d.scheduler.active_jobs : "-");
+  } catch (e) {
+    $("sysInfoOut").textContent = "Failed to load diagnostics.";
+  }
+}
+
 function connectWs() {
   const ws = new WebSocket("ws://" + location.host + "/ws");
   ws.onopen = () => { $("dot").classList.add("live");
@@ -300,7 +557,10 @@ function connectWs() {
         wifi_status: d.connected ? "connected" : "disconnected" });
       refresh();
     }
-    else if (d.type === "module") refresh();
+    else if (d.type === "module") {
+      refresh();
+      if ($("panel-modules").classList.contains("active")) loadModulesTab();
+    }
     else if (d.type === "ota") {
       if (d.done) $("otamsg").textContent = "Update complete — rebooting.";
       else { $("otabar").style.width = d.percent + "%";
@@ -344,17 +604,7 @@ setInterval(refresh, 15000);
 connectWs();
 
 document.querySelectorAll("nav button").forEach(btn => {
-  btn.onclick = () => {
-    document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-    btn.classList.add("active");
-    $("panel-" + btn.dataset.tab).classList.add("active");
-    if (btn.dataset.tab === "diag") loadDiagnostics();
-    if (btn.dataset.tab === "files") loadFiles("/fs");
-    if (btn.dataset.tab === "api") loadEndpoints();
-    if (btn.dataset.tab === "settings") loadSettings();
-    if (btn.dataset.tab === "config") loadConfigTab();
-  };
+  btn.onclick = () => switchTab(btn.dataset.tab);
 });
 
 function row(k, v) {

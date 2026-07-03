@@ -16,6 +16,11 @@ public:
         period_ms_ =
             ctx().config.getInt("system_info", "period_ms", 60000);
 
+        if (period_ms_ <= 0) {
+            gallus::Log::info(kTag, "ready — on-demand (period_ms=0)");
+            return gallus::Status::success();
+        }
+
         auto job = ctx().scheduler.every(
             static_cast<uint32_t>(period_ms_), &SystemInfoModule::tick, this,
             gallus::Priority::Background);
@@ -28,8 +33,10 @@ public:
     }
 
     gallus::Status stop() override {
-        (void)ctx().scheduler.cancel(job_);
-        job_ = {};
+        if (job_.valid()) {
+            (void)ctx().scheduler.cancel(job_);
+            job_ = {};
+        }
         return gallus::Status::success();
     }
 

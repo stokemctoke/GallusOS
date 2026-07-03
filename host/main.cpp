@@ -45,20 +45,24 @@ bool seedConfigs(gallus::services::StorageService& storage) {
            writeConfig(storage, "/fs/config/gpio_blink.json",
                        R"({"pin":27,"period_ms":400})") &&
            writeConfig(storage, "/fs/config/i2c_scanner.json",
-                       R"({"period_ms":100})") &&
+                       R"({"auto_start":true,"period_ms":100})") &&
            writeConfig(storage, "/fs/config/system_info.json",
-                       R"({"period_ms":100})") &&
+                       R"({"auto_start":true,"period_ms":100})") &&
            writeConfig(storage, "/fs/config/wifi_scan.json",
-                       R"({"period_ms":100,"band":"both"})");
+                       R"({"auto_start":true,"period_ms":100,"band":"both"})");
 }
 
 unsigned countActiveModules(const gallus::sdk::ModuleManager& modules) {
     unsigned count = 0;
     for (size_t i = 0; i < modules.count(); ++i) {
         const auto& entry = modules.at(i);
-        if (entry.state != gallus::sdk::ModuleManager::State::Disabled) {
-            ++count;
+        if (entry.state == gallus::sdk::ModuleManager::State::Disabled) {
+            continue;
         }
+        if (!modules.autoStart(entry.info->name)) {
+            continue;
+        }
+        ++count;
     }
     return count;
 }

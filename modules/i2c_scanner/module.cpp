@@ -13,7 +13,12 @@ class I2cScannerModule : public gallus::sdk::Module {
 public:
     gallus::Status start() override {
         period_ms_ =
-            ctx().config.getInt("i2c_scanner", "period_ms", 30000);
+            ctx().config.getInt("i2c_scanner", "period_ms", 0);
+
+        if (period_ms_ <= 0) {
+            gallus::Log::info(kTag, "ready — on-demand (period_ms=0)");
+            return gallus::Status::success();
+        }
 
         auto job = ctx().scheduler.every(
             static_cast<uint32_t>(period_ms_), &I2cScannerModule::tick, this,
@@ -22,13 +27,14 @@ public:
             return job.status();
         }
         job_ = job.value();
-        tick(this);
         return gallus::Status::success();
     }
 
     gallus::Status stop() override {
-        (void)ctx().scheduler.cancel(job_);
-        job_ = {};
+        if (job_.valid()) {
+            (void)ctx().scheduler.cancel(job_);
+            job_ = {};
+        }
         return gallus::Status::success();
     }
 
@@ -63,7 +69,7 @@ private:
     }
 
     gallus::JobHandle job_;
-    int32_t period_ms_ = 30000;
+    int32_t period_ms_ = 0;
 };
 
 }  // namespace

@@ -64,6 +64,7 @@ public:
     Status disable(const char* name);
 
     [[nodiscard]] bool isEnabled(const char* name) const;
+    [[nodiscard]] bool autoStart(const char* name) const;
 
     [[nodiscard]] size_t count() const { return count_; }
     [[nodiscard]] const Entry& at(size_t index) const {

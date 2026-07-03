@@ -1,6 +1,7 @@
 {
   "wifi_scan": {
-    "period_ms": 60000,
+    "auto_start": false,
+    "period_ms": 0,
     "band": "both"
   }
 }

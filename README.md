@@ -16,7 +16,6 @@ services, compile-time modules, a versioned REST API, a WebSocket push
 channel, and a browser dashboard with over-the-air firmware updates.
 
 Primary target hardware: **Seeed Studio XIAO ESP32-C5** (8 MB flash).
-Active development: [`stage-8`](https://github.com/stokemctoke/GallusOS/tree/stage-8).
 
 ---
 
@@ -326,6 +325,7 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | 5 | Display, battery, OTA, web dashboard | Done |
 | 6 | SDK CLI, diagnostics UI, REST explorer, filesystem browser, host tests, CI | Done |
 | 7 | Config REST API, Settings tab, DiagnosticsService, live log stream, charge mode | Done |
+| 8 | WiFi re-provision, config editor, README header (partial) | In progress |
 
 | Version | Value |
 |---|---|
@@ -333,7 +333,13 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | REST API | v1 |
 | Module API | not yet frozen |
 
-Phase 8 work is on branch **`stage-8`**.
+Phase 8 is partially complete on **`master`**.
+
+### Phase 8 additions (done)
+
+- **WiFi re-provision** — change SSID/password from Settings and reconnect without factory reset
+- **Dashboard config editor** — browse and edit any config namespace as JSON
+- **README** — badges, release summary, and `GallusOS_header.jpg`
 
 ### Phase 6 additions
 
@@ -352,13 +358,12 @@ Phase 8 work is on branch **`stage-8`**.
 - **SDK CLI:** `create-service`, `create-driver` scaffolds
 - **Fixes:** Network card WiFi/IP on page load; provisioning portal takes precedence over dashboard on `GET /`
 
-### Phase 8 (in progress)
+### Phase 8 / 9 (remaining)
 
-- **WiFi re-provision** — change SSID/password from Settings and reconnect without factory reset
-- **Dashboard config editor** — browse and edit any config namespace as JSON
 - **Host simulation** — run modules/services on the desktop for faster iteration
 - **Module API freeze** — document and stabilise the SDK surface for third-party modules
 - **SDK CLI:** `generate-docs`, `lint`, richer `validate` checks
+- **GitHub release** — tag v0.1.0 with flash instructions and changelog
 
 ---
 

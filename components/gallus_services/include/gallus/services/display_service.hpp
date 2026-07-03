@@ -9,6 +9,7 @@
 #include "gallus/drivers/ssd1306.hpp"
 #include "gallus/error.hpp"
 #include "gallus/event_bus.hpp"
+#include "gallus/services/config_service.hpp"
 #include "gallus/services/i2c_service.hpp"
 
 /// @file display_service.hpp
@@ -28,8 +29,8 @@ namespace gallus::services {
 
 class DisplayService {
 public:
-    DisplayService(EventBus& events, I2cService& i2c)
-        : events_(events), i2c_(i2c) {}
+    DisplayService(EventBus& events, I2cService& i2c, ConfigService& config)
+        : events_(events), i2c_(i2c), config_(config) {}
     DisplayService(const DisplayService&) = delete;
     DisplayService& operator=(const DisplayService&) = delete;
 
@@ -51,6 +52,7 @@ private:
     struct StatusState {
         bool wifi_connected = false;
         uint8_t ip[4] = {};
+        char hostname[24] = {};
         uint8_t battery_pct = 0;
         bool battery_valid = false;
         char module[24] = {};
@@ -60,10 +62,12 @@ private:
     void flickerTo(const uint8_t* frame, int flashes);
     void flickerPair(const uint8_t* light, const uint8_t* dark, int flashes);
     void renderStatus();
+    void updateHostname();
     void drawText(int x, int y, const char* text, bool on = true);
 
     EventBus& events_;
     I2cService& i2c_;
+    ConfigService& config_;
     drivers::Ssd1306 panel_;
     StatusState status_ = {};
     SemaphoreHandle_t mutex_ = nullptr;

@@ -5,6 +5,8 @@
 
 #include "freertos/task.h"
 
+#include "esp_mac.h"
+
 #include "gallus/drivers/font5x7.hpp"
 #include "gallus/log.hpp"
 #include "gallus/services/splash_frames.hpp"
@@ -122,8 +124,18 @@ Status DisplayService::start() {
         events_.subscribe(EventId::ModuleStarted, &onEvent, this).status());
 
     status_active_ = true;
+    updateHostname();
     renderStatus();
     return Status::success();
+}
+
+void DisplayService::updateHostname() {
+    char fallback[24] = {};
+    uint8_t mac[6] = {};
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    snprintf(fallback, sizeof(fallback), "gallus-%02x%02x", mac[4], mac[5]);
+    (void)config_.getString("network", "hostname", status_.hostname,
+                            sizeof(status_.hostname), fallback);
 }
 
 void DisplayService::onEvent(const Event& event, void* ctx) {
@@ -134,6 +146,7 @@ void DisplayService::onEvent(const Event& event, void* ctx) {
             if (const auto* p = event.as<WifiPayload>()) {
                 self->status_.wifi_connected = true;
                 memcpy(self->status_.ip, p->ip, 4);
+                self->updateHostname();
             }
             break;
         case EventId::WiFiDisconnected:
@@ -175,21 +188,23 @@ void DisplayService::renderStatus() {
     if (status_.wifi_connected) {
         snprintf(line, sizeof(line), "IP %u.%u.%u.%u", status_.ip[0],
                  status_.ip[1], status_.ip[2], status_.ip[3]);
+        drawText(0, 16, line);
+        snprintf(line, sizeof(line), "%s.local", status_.hostname);
+        drawText(0, 26, line);
     } else {
-        snprintf(line, sizeof(line), "WiFi: connecting...");
+        drawText(0, 16, "WiFi: connecting...");
     }
-    drawText(0, 16, line);
 
     if (status_.battery_valid) {
-        snprintf(line, sizeof(line), "Battery: %u%%", status_.battery_pct);
+        snprintf(line, sizeof(line), "Bat: %u%%", status_.battery_pct);
     } else {
-        snprintf(line, sizeof(line), "Battery: --");
+        snprintf(line, sizeof(line), "Bat: --");
     }
-    drawText(0, 28, line);
+    drawText(0, 38, line);
 
     if (status_.module[0] != '\0') {
         snprintf(line, sizeof(line), "Mod: %s", status_.module);
-        drawText(0, 40, line);
+        drawText(0, 50, line);
     }
 
     (void)panel_.flush();

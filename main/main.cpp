@@ -71,7 +71,7 @@ extern "C" void app_main(void) {
     static gallus::services::NetworkService network(config, kernel.events());
     static gallus::services::TimeService time_service(kernel.events());
     static gallus::services::DisplayService display(
-        kernel.events(), i2c);
+        kernel.events(), i2c, config);
     static gallus::services::BatteryService battery(
         kernel.events(), kernel.scheduler(),
         gallus::hal::board::kPinBatteryAdc,

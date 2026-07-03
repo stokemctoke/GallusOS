@@ -114,6 +114,7 @@
     <h2>Network</h2>
     <div class="row"><span class="k">WiFi</span><span class="v" id="wifi">-</span></div>
     <div class="row"><span class="k">IP</span><span class="v" id="ip">-</span></div>
+    <div class="row"><span class="k">Host</span><span class="v" id="host">-</span></div>
   </div>
 
   <div class="card modules full">
@@ -164,19 +165,14 @@
     <div class="muted" id="cfgTokenMsg" style="margin-top:8px"></div>
   </div>
   <div class="card full">
-    <h2>Network</h2>
-    <div class="row">
-      <span class="k">Static IP (Gallus 192.168.42.x)</span>
-      <span class="v"><input type="checkbox" id="cfgStatic"></span>
+    <h2>Device</h2>
+    <div class="ota-row">
+      <button id="sysReboot">Reboot</button>
+      <button id="sysReset">Reset settings</button>
     </div>
-    <div class="row"><span class="k">IP</span></div>
-    <input type="text" id="cfgIp" value="192.168.42.42">
-    <div class="row" style="margin-top:8px"><span class="k">Gateway</span></div>
-    <input type="text" id="cfgGw" value="192.168.42.1">
-    <div class="row" style="margin-top:8px"><span class="k">Netmask</span></div>
-    <input type="text" id="cfgMask" value="255.255.255.0">
-    <button id="cfgNetSave" style="margin-top:10px">Save network</button>
-    <div class="muted" id="cfgNetMsg" style="margin-top:8px">Reboot required after network changes.</div>
+    <div class="muted" id="sysMsg" style="margin-top:8px">
+      Reset clears WiFi credentials, API token, and other saved config, then reboots into setup mode.
+    </div>
   </div>
 </section>
 
@@ -213,6 +209,7 @@ async function refresh() {
     $("uptime").textContent = fmtUptime(s.uptime_ms);
     $("heap").textContent = fmtKB(s.free_heap);
     $("boots").textContent = s.boot_count;
+    if (s.hostname) $("host").textContent = s.hostname + ".local";
   } catch (e) {}
   try {
     const b = await api("battery");
@@ -247,7 +244,8 @@ function connectWs() {
     let d; try { d = JSON.parse(ev.data); } catch(e) { return; }
     if (d.type === "battery") setBattery(d.pct, d.mv);
     else if (d.type === "wifi") { $("wifi").textContent = "connected";
-      $("ip").textContent = d.ip; }
+      $("ip").textContent = d.ip;
+      refresh(); }
     else if (d.type === "module") refresh();
     else if (d.type === "ota") {
       if (d.done) $("otamsg").textContent = "Update complete — rebooting.";
@@ -391,14 +389,6 @@ async function loadSettings() {
     $("cfgToken").value = sys.values.api_token === "(set)" ? "" : (sys.values.api_token || "");
     $("cfgToken").placeholder = sys.values.api_token === "(set)" ? "(token is set)" : "Leave blank for open API";
   } catch (e) {}
-  try {
-    const net = await fetch("/api/v1/config?namespace=network").then(r => r.json());
-    const v = net.values || {};
-    $("cfgStatic").checked = !!v.use_static_ip;
-    if (v.ip) $("cfgIp").value = v.ip;
-    if (v.gateway) $("cfgGw").value = v.gateway;
-    if (v.netmask) $("cfgMask").value = v.netmask;
-  } catch (e) {}
 }
 
 async function saveConfig(ns, values, msgEl) {
@@ -425,13 +415,25 @@ $("cfgTokenSave").onclick = () => {
   saveConfig("system", values, $("cfgTokenMsg"));
 };
 
-$("cfgNetSave").onclick = () => {
-  saveConfig("network", {
-    use_static_ip: $("cfgStatic").checked,
-    ip: $("cfgIp").value.trim(),
-    gateway: $("cfgGw").value.trim(),
-    netmask: $("cfgMask").value.trim()
-  }, $("cfgNetMsg"));
+$("sysReboot").onclick = async () => {
+  $("sysMsg").textContent = "Rebooting…";
+  try {
+    await fetch("/api/v1/system/reboot", {method: "POST"});
+  } catch (e) {
+    $("sysMsg").textContent = "Reboot requested.";
+  }
+};
+
+$("sysReset").onclick = async () => {
+  if (!confirm("Erase WiFi credentials and all saved settings?")) return;
+  $("sysMsg").textContent = "Resetting…";
+  try {
+    const r = await fetch("/api/v1/system/reset", {method: "POST"});
+    if (!r.ok) throw new Error("failed");
+    $("sysMsg").textContent = "Settings cleared — rebooting into setup mode.";
+  } catch (e) {
+    $("sysMsg").textContent = "Reset failed.";
+  }
 };
 </script>
 </body>

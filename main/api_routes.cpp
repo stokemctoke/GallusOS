@@ -4,6 +4,7 @@
 
 #include "cJSON.h"
 #include "esp_idf_version.h"
+#include "esp_mac.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -16,6 +17,28 @@ namespace gallus::app {
 namespace {
 
 constexpr size_t kMaxFileReadBytes = 8192;
+
+void delayedRestart(void* /*ctx*/) {
+    vTaskDelay(pdMS_TO_TICKS(400));
+    esp_restart();
+}
+
+void scheduleRestart() {
+    xTaskCreate(&delayedRestart, "gallus_reboot", 2048, nullptr, 5, nullptr);
+}
+
+void fillHostname(const services::ConfigService* config, char* out,
+                  size_t cap) {
+    char fallback[32] = {};
+    uint8_t mac[6] = {};
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    snprintf(fallback, sizeof(fallback), "gallus-%02x%02x", mac[4], mac[5]);
+    if (config != nullptr) {
+        (void)config->getString("network", "hostname", out, cap, fallback);
+    } else {
+        snprintf(out, cap, "%s", fallback);
+    }
+}
 
 /// Serialize @p doc, send it, and free everything.
 esp_err_t sendJson(httpd_req_t* req, cJSON* doc) {
@@ -48,6 +71,9 @@ esp_err_t systemHandler(httpd_req_t* req) {
                             esp_get_minimum_free_heap_size());
     cJSON_AddNumberToObject(
         doc, "boot_count", ctx->config->getInt("system", "boot_count", 0));
+    char hostname[32] = {};
+    fillHostname(ctx->config, hostname, sizeof(hostname));
+    cJSON_AddStringToObject(doc, "hostname", hostname);
     return sendJson(req, doc);
 }
 
@@ -264,6 +290,44 @@ esp_err_t configPutHandler(httpd_req_t* req) {
     return sendJson(req, out);
 }
 
+esp_err_t rebootHandler(httpd_req_t* req) {
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (!ctx->rest->authorize(req)) {
+        return ESP_OK;
+    }
+
+    cJSON* doc = cJSON_CreateObject();
+    cJSON_AddBoolToObject(doc, "ok", true);
+    cJSON_AddStringToObject(doc, "action", "reboot");
+    const esp_err_t err = sendJson(req, doc);
+    if (err == ESP_OK) {
+        scheduleRestart();
+    }
+    return err;
+}
+
+esp_err_t resetHandler(httpd_req_t* req) {
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (!ctx->rest->authorize(req)) {
+        return ESP_OK;
+    }
+
+    const Status reset = ctx->config->resetAll();
+    if (!reset.ok()) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "reset failed");
+    }
+
+    cJSON* doc = cJSON_CreateObject();
+    cJSON_AddBoolToObject(doc, "ok", true);
+    cJSON_AddStringToObject(doc, "action", "reset");
+    const esp_err_t err = sendJson(req, doc);
+    if (err == ESP_OK) {
+        scheduleRestart();
+    }
+    return err;
+}
+
 esp_err_t filesListHandler(httpd_req_t* req) {
     auto* ctx = static_cast<ApiContext*>(req->user_ctx);
     if (!ctx->rest->authorize(req)) {
@@ -373,6 +437,8 @@ esp_err_t endpointsHandler(httpd_req_t* req) {
         {"GET", "/api/v1/i2c/scan", "Scan the I2C bus"},
         {"GET", "/api/v1/config?namespace=system", "Read a config namespace"},
         {"PUT", "/api/v1/config", "Update config namespace values"},
+        {"POST", "/api/v1/system/reboot", "Reboot the device"},
+        {"POST", "/api/v1/system/reset", "Erase saved settings and reboot"},
         {"GET", "/api/v1/endpoints", "This list"},
         {"POST", "/api/v1/ota/upload", "Upload firmware binary"},
     };
@@ -436,6 +502,16 @@ Status registerApiRoutes(ApiContext& ctx) {
     }
     status = ctx.rest->registerRoute(HTTP_PUT, "/api/v1/config",
                                      &configPutHandler, &ctx);
+    if (!status.ok()) {
+        return status;
+    }
+    status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/system/reboot",
+                                     &rebootHandler, &ctx);
+    if (!status.ok()) {
+        return status;
+    }
+    status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/system/reset",
+                                     &resetHandler, &ctx);
     if (!status.ok()) {
         return status;
     }

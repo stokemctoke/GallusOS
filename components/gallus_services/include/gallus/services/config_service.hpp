@@ -60,6 +60,9 @@ public:
     /// Remove one key from a namespace.
     Status erase(const char* ns, const char* key);
 
+    /// Delete all persisted namespace files (factory reset).
+    Status resetAll();
+
     /// Export a namespace as JSON. Sensitive keys are redacted when
     /// @p redact is true. Caller owns the returned cJSON*.
     void* exportNamespace(const char* ns, bool redact) const;

@@ -305,4 +305,41 @@ void* ConfigService::exportNamespace(const char* ns, bool redact) const {
     return copy;
 }
 
+Status ConfigService::resetAll() {
+    if (!initialized_) {
+        return Error::InvalidState;
+    }
+
+    char dir[64];
+    snprintf(dir, sizeof(dir), "%s/%s", storage_.basePath(), kConfigDirName);
+
+    DirEntry entries[24];
+    const auto listed =
+        storage_.listDir(dir, entries, sizeof(entries) / sizeof(entries[0]));
+    if (!listed.ok() && listed.error() != Error::NotFound) {
+        return listed.status();
+    }
+    const size_t count = listed.ok() ? listed.value() : 0;
+
+    Lock lock(mutex_);
+    for (size_t i = 0; i < count; ++i) {
+        if (entries[i].is_dir) {
+            continue;
+        }
+        char path[128];
+        const int written =
+            snprintf(path, sizeof(path), "%s/%s", dir, entries[i].name);
+        if (written <= 0 ||
+            static_cast<size_t>(written) >= sizeof(path)) {
+            continue;
+        }
+        const Status status = storage_.removeFile(path);
+        if (!status.ok()) {
+            Log::warn(kTag, "failed to remove %s", path);
+        }
+    }
+    Log::info(kTag, "config reset to defaults");
+    return Status::success();
+}
+
 }  // namespace gallus::services

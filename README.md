@@ -146,6 +146,8 @@ logged at startup.
 | `GET` | `/api/v1/i2c/scan` | Scan the I2C bus for devices |
 | `GET` | `/api/v1/config?namespace=system` | Read a config namespace (secrets redacted) |
 | `PUT` | `/api/v1/config` | Update config values (`{"namespace","values"}`) |
+| `POST` | `/api/v1/system/reboot` | Reboot the device |
+| `POST` | `/api/v1/system/reset` | Erase saved settings and reboot |
 | `GET` | `/api/v1/endpoints` | Catalogue of built-in API routes |
 | `POST` | `/api/v1/ota/upload` | Raw firmware binary (same file as `build/gallus_os.bin`) |
 
@@ -313,7 +315,7 @@ Phase 7 work is on branch **`stage-7`**.
 
 - **`DiagnosticsService`** — heap, scheduler, event-bus and task snapshots for REST
 - **REST:** `GET/PUT /api/v1/config` — read/write config namespaces (secrets redacted)
-- **Dashboard:** Settings tab (API token, static IP), live serial log stream on Diagnostics
+- **Dashboard:** Settings tab (API token, reboot, factory reset), live serial log stream on Diagnostics
 - **SDK CLI:** `create-service`, `create-driver` scaffolds
 
 ---

@@ -213,9 +213,16 @@
     <h2>REST Explorer</h2>
     <div id="apiList"></div>
     <div style="margin-top:12px" class="row">
+      <select id="apiMethod" style="width:auto;min-width:5.5rem">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+        <option value="PUT">PUT</option>
+      </select>
       <input type="text" id="apiPath" value="/api/v1/system">
-      <button id="apiGo">Send GET</button>
+      <button id="apiGo">Send</button>
     </div>
+    <textarea id="apiBody" style="margin-top:10px;min-height:72px;display:none"
+      spellcheck="false" placeholder='Optional JSON body for POST / PUT'></textarea>
     <pre id="apiOut" style="margin-top:12px;white-space:pre-wrap"></pre>
   </div>
 </section>
@@ -410,22 +417,52 @@ async function loadEndpoints() {
     const d = await api("endpoints");
     $("apiList").innerHTML = '<table><tr><th>Method</th><th>Path</th><th>Description</th></tr>' +
       d.endpoints.map(e =>
-        '<tr><td>' + e.method + '</td><td><span class="linkish" onclick="setApiPath(\'' +
-        e.path + '\')">' + e.path + '</span></td><td>' + e.description + '</td></tr>'
+        '<tr class="linkish" onclick="setApiRequest(\'' +
+        e.method + '\',\'' + e.path.replace(/'/g, "\\'") + '\')">' +
+        '<td>' + e.method + '</td><td>' + e.path + '</td><td>' +
+        e.description + '</td></tr>'
       ).join("") + '</table>';
   } catch (e) {
     $("apiList").innerHTML = '<div class="muted">Failed to load endpoints.</div>';
   }
 }
 
-function setApiPath(path) { $("apiPath").value = path; }
+function setApiRequest(method, path) {
+  $("apiMethod").value = method;
+  $("apiPath").value = path;
+  syncApiBody();
+}
+
+function syncApiBody() {
+  const method = $("apiMethod").value;
+  const show = method === "POST" || method === "PUT";
+  $("apiBody").style.display = show ? "block" : "none";
+  if (!show) {
+    $("apiBody").value = "";
+  }
+}
+
+$("apiMethod").onchange = syncApiBody;
 
 $("apiGo").onclick = async () => {
-  const path = $("apiPath").value;
+  const path = $("apiPath").value.trim();
+  const method = $("apiMethod").value;
+  const opts = { method };
+  const bodyText = $("apiBody").value.trim();
+  if ((method === "POST" || method === "PUT") && bodyText) {
+    opts.headers = { "Content-Type": "application/json" };
+    opts.body = bodyText;
+  }
   try {
-    const text = await fetch(path).then(r => r.text());
-    try { $("apiOut").textContent = JSON.stringify(JSON.parse(text), null, 2); }
-    catch (e) { $("apiOut").textContent = text; }
+    const r = await fetch(path, opts);
+    const text = await r.text();
+    const prefix = r.ok ? "" : "HTTP " + r.status + "\n\n";
+    try {
+      $("apiOut").textContent = prefix +
+        JSON.stringify(JSON.parse(text), null, 2);
+    } catch (e) {
+      $("apiOut").textContent = prefix + text;
+    }
   } catch (e) {
     $("apiOut").textContent = "Request failed.";
   }

@@ -33,6 +33,7 @@ public:
 
     struct Entry {
         const ModuleInfo* info = nullptr;
+        ModuleFactory factory = nullptr;
         Module* instance = nullptr;
         State state = State::Registered;
     };
@@ -50,6 +51,20 @@ public:
     /// Stop every started module.
     Status stopAll();
 
+    /// Start one module by name (must be initialized or stopped).
+    Status start(const char* name);
+
+    /// Stop one running module by name.
+    Status stop(const char* name);
+
+    /// Persist enable flag, initialize if needed (does not auto-start).
+    Status enable(const char* name);
+
+    /// Stop, tear down, and persist disable flag for one module.
+    Status disable(const char* name);
+
+    [[nodiscard]] bool isEnabled(const char* name) const;
+
     [[nodiscard]] size_t count() const { return count_; }
     [[nodiscard]] const Entry& at(size_t index) const {
         return entries_[index];
@@ -58,6 +73,12 @@ public:
     static const char* stateName(State state);
 
 private:
+    Entry* findEntry(const char* name);
+    const Entry* findEntry(const char* name) const;
+    Status startOne(Entry& entry);
+    Status stopOne(Entry& entry);
+    Status initOne(Entry& entry);
+    void destroyInstance(Entry& entry);
     void publishLifecycle(EventId id, const char* name);
 
     Entry entries_[ModuleRegistry::kMaxModules] = {};

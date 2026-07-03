@@ -36,6 +36,8 @@ States tracked by `ModuleManager`: Registered → Initialized → Started → St
 (or Disabled / Failed).
 
 Enable/disable via config namespace `modules`, key `<module_name>` (bool, default `true`).
+At runtime, use `POST /api/v1/modules/<name>/enable|disable|start|stop` — enable persists
+and initializes without starting; disable stops, tears down, and persists.
 
 ---
 

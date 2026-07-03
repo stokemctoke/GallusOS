@@ -169,7 +169,11 @@ logged at startup.
 |---|---|---|
 | `GET` | `/api/v1/system` | Name, version, IDF version, uptime, heap, boot count |
 | `GET` | `/api/v1/gpio` | Pin reservation snapshot |
-| `GET` | `/api/v1/modules` | Registered modules, versions, categories, state |
+| `GET` | `/api/v1/modules` | Registered modules, versions, categories, state, enabled flag |
+| `POST` | `/api/v1/modules/<name>/start` | Start one enabled module |
+| `POST` | `/api/v1/modules/<name>/stop` | Stop one running module |
+| `POST` | `/api/v1/modules/<name>/enable` | Enable module (persist + initialize; does not auto-start) |
+| `POST` | `/api/v1/modules/<name>/disable` | Stop, tear down, and disable module (persist) |
 | `GET` | `/api/v1/battery` | Millivolts and percentage |
 | `GET` | `/api/v1/diagnostics` | Heap, tasks, event-bus and filesystem stats |
 | `GET` | `/api/v1/files/list?path=/fs` | List LittleFS directory entries |

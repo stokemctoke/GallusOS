@@ -71,6 +71,15 @@
   .mod-detail-tools select { width:auto; min-width:7rem; }
   .chip { display:inline-block; font-size:12px; padding:4px 10px; margin:4px 4px 0 0;
     border-radius:999px; background:var(--bg3); font-family:ui-monospace,monospace; }
+  .mod-subnav { display:flex; gap:8px; }
+  .mod-subnav button { background:transparent; color:var(--tx1); border:1px solid var(--bg3);
+    padding:6px 12px; font-size:12px; border-radius:8px; }
+  .mod-subnav button.active { color:var(--bg0); background:var(--acc0); border-color:var(--acc0); }
+  .mod-header { padding:12px 0; border-bottom:1px solid var(--bg3); }
+  .mod-field { margin-top:10px; }
+  .mod-field .k { display:block; font-size:12px; color:var(--tx1); margin-bottom:4px; }
+  nav button.btn-ghost, button.btn-ghost { background:transparent; color:var(--acc1);
+    border:1px solid var(--bg3); }
   .full { grid-column:1/-1; }
   button { background:var(--acc0); color:var(--bg0); border:none;
     border-radius:8px; padding:10px 16px; font-weight:600; cursor:pointer;
@@ -161,19 +170,24 @@
 
 <section id="panel-modules" class="panel">
   <div class="card full">
-    <h2>Loaded modules</h2>
+    <h2>Modules</h2>
     <p class="muted" style="margin:0 0 12px">
-      Diagnostic modules stay idle at boot. Start one when you need it, use the
-      controls below, then Stop when done.
+      Pick a module from the list, then use <b>Controls</b> to run it or
+      <b>Settings</b> to change behaviour. Survey modules stay idle at boot
+      unless auto-start is enabled.
     </p>
-    <div id="modList"></div>
-    <div class="muted" id="modMsg" style="margin-top:10px"></div>
-  </div>
-  <div class="card full">
-    <h2 id="modDetailTitle">Module controls</h2>
-    <div id="modDetail">
-      <p class="muted">Select a module above.</p>
+    <div class="ota-row">
+      <select id="modSelect" style="flex:1;min-width:160px"></select>
+      <button id="modRefresh" class="btn-ghost">Refresh</button>
     </div>
+    <div id="modHeader" class="mod-header"></div>
+    <div class="mod-subnav">
+      <button type="button" class="active" data-modpane="controls">Controls</button>
+      <button type="button" data-modpane="settings">Settings</button>
+    </div>
+    <div id="modControls" style="margin-top:12px"></div>
+    <div id="modSettings" style="margin-top:12px;display:none"></div>
+    <div class="muted" id="modMsg" style="margin-top:10px"></div>
   </div>
 </section>
 
@@ -331,6 +345,36 @@ function renderModules(mods) {
 
 let moduleCatalog = [];
 let selectedModule = null;
+let modSubPane = "controls";
+let modSettingsCache = {};
+
+const MOD_SETTINGS = {
+  wifi_scan: [
+    { key: "auto_start", label: "Auto-start at boot", type: "bool" },
+    { key: "period_ms", label: "Background interval (ms, 0 = on-demand only)", type: "number" },
+    { key: "band", label: "Band filter", type: "select", options: ["both", "2.4", "5"] }
+  ],
+  i2c_scanner: [
+    { key: "auto_start", label: "Auto-start at boot", type: "bool" },
+    { key: "period_ms", label: "Background interval (ms, 0 = on-demand only)", type: "number" }
+  ],
+  system_info: [
+    { key: "auto_start", label: "Auto-start at boot", type: "bool" },
+    { key: "period_ms", label: "Log interval (ms)", type: "number" }
+  ],
+  gpio_blink: [
+    { key: "pin", label: "GPIO pin", type: "number" },
+    { key: "period_ms", label: "Toggle interval (ms)", type: "number" }
+  ],
+  hello_world: [
+    { key: "message", label: "Greeting message", type: "text" },
+    { key: "period_s", label: "Heartbeat interval (seconds)", type: "number" }
+  ]
+};
+
+function currentModule() {
+  return moduleCatalog.find(m => m.name === selectedModule) || null;
+}
 
 function switchTab(tab) {
   document.querySelectorAll("nav button").forEach(b => {
@@ -358,86 +402,77 @@ async function postModule(name, action) {
 
 function setModMsg(text) { $("modMsg").textContent = text || ""; }
 
-async function moduleAction(name, action, ev) {
+async function moduleAction(action, ev) {
   if (ev) ev.stopPropagation();
-  setModMsg(action.charAt(0).toUpperCase() + action.slice(1) + " " + name + "…");
+  const mod = currentModule();
+  if (!mod) return;
+  setModMsg(action.charAt(0).toUpperCase() + action.slice(1) + " " + mod.name + "…");
   try {
-    await postModule(name, action);
+    await postModule(mod.name, action);
     setModMsg("");
-    await loadModulesTab();
+    await loadModulesTab(true);
     refresh();
   } catch (e) {
     setModMsg(e.message || "Request failed.");
   }
 }
 
-function selectModule(name) {
-  selectedModule = name;
-  renderModuleList();
-  renderModuleDetail();
+function setModSubPane(pane) {
+  modSubPane = pane;
+  document.querySelectorAll(".mod-subnav button").forEach(b => {
+    b.classList.toggle("active", b.dataset.modpane === pane);
+  });
+  $("modControls").style.display = pane === "controls" ? "block" : "none";
+  $("modSettings").style.display = pane === "settings" ? "block" : "none";
+  if (pane === "settings") loadModuleSettingsForm();
 }
 
-function runningModule(mod) {
-  return mod && mod.enabled && mod.state === "started";
-}
-
-function renderModuleList() {
-  if (!moduleCatalog.length) {
-    $("modList").innerHTML = '<div class="muted">No modules loaded.</div>';
-    return;
-  }
-  $("modList").innerHTML = moduleCatalog.map(m => {
-    const sel = m.name === selectedModule ? " selected" : "";
-    const startDisabled = !m.enabled || m.state === "started" ||
-      m.state === "failed" || m.state === "disabled";
-    const stopDisabled = !m.enabled || m.state !== "started";
-    return '<div class="mod-row' + sel + '" onclick="selectModule(\'' +
-      m.name + '\')">' +
-      '<div><div><b>' + m.name + '</b> <span class="pill ' + m.state + '">' +
-      m.state + '</span></div>' +
-      '<div class="mod-meta">' + m.category + ' &middot; v' + m.version +
-      (m.auto_start ? ' &middot; auto-start' : ' &middot; on-demand') +
-      (m.enabled ? '' : ' &middot; disabled') + '</div>' +
-      '<div class="mod-meta">' + (m.description || '') + '</div></div>' +
-      '<div class="mod-actions">' +
-      '<button class="btn-sm btn-ghost" onclick="moduleAction(\'' + m.name +
-      '\',\'enable\',event)"' + (m.enabled ? ' disabled' : '') +
-      '>Enable</button>' +
-      '<button class="btn-sm btn-ghost" onclick="moduleAction(\'' + m.name +
-      '\',\'disable\',event)"' + (!m.enabled ? ' disabled' : '') +
-      '>Disable</button>' +
-      '<button class="btn-sm" onclick="moduleAction(\'' + m.name +
-      '\',\'start\',event)"' + (startDisabled ? ' disabled' : '') +
-      '>Start</button>' +
-      '<button class="btn-sm btn-ghost" onclick="moduleAction(\'' + m.name +
-      '\',\'stop\',event)"' + (stopDisabled ? ' disabled' : '') +
-      '>Stop</button></div></div>';
-  }).join("");
-}
-
-function renderModuleDetail() {
-  const mod = moduleCatalog.find(m => m.name === selectedModule);
+function renderModHeader() {
+  const mod = currentModule();
   if (!mod) {
-    $("modDetailTitle").textContent = "Module controls";
-    $("modDetail").innerHTML = '<p class="muted">Select a module above.</p>';
+    $("modHeader").innerHTML = '<p class="muted">No module selected.</p>';
     return;
   }
-  $("modDetailTitle").textContent = mod.name;
+  const startDisabled = !mod.enabled || mod.state === "started" ||
+    mod.state === "failed" || mod.state === "disabled";
+  const stopDisabled = !mod.enabled || mod.state !== "started";
+  $("modHeader").innerHTML =
+    '<div><b style="font-size:18px">' + mod.name + '</b> ' +
+    '<span class="pill ' + mod.state + '">' + mod.state + '</span></div>' +
+    '<div class="mod-meta">' + mod.category + ' · v' + mod.version +
+    (mod.auto_start ? ' · auto-start' : ' · on-demand') +
+    (mod.enabled ? '' : ' · disabled') + '</div>' +
+    '<div class="mod-meta" style="margin-top:6px">' + (mod.description || '') + '</div>' +
+    '<div class="mod-actions" style="margin-top:12px;justify-content:flex-start">' +
+    '<button class="btn-sm btn-ghost" onclick="moduleAction(\'enable\',event)"' +
+    (mod.enabled ? ' disabled' : '') + '>Enable</button>' +
+    '<button class="btn-sm btn-ghost" onclick="moduleAction(\'disable\',event)"' +
+    (!mod.enabled ? ' disabled' : '') + '>Disable</button>' +
+    '<button class="btn-sm" onclick="moduleAction(\'start\',event)"' +
+    (startDisabled ? ' disabled' : '') + '>Start</button>' +
+    '<button class="btn-sm btn-ghost" onclick="moduleAction(\'stop\',event)"' +
+    (stopDisabled ? ' disabled' : '') + '>Stop</button></div>';
+}
 
+function renderModControls() {
+  const mod = currentModule();
+  if (!mod) {
+    $("modControls").innerHTML = "";
+    return;
+  }
   if (!mod.enabled) {
-    $("modDetail").innerHTML = '<p class="muted">Module is disabled. Click Enable to load it.</p>';
+    $("modControls").innerHTML =
+      '<p class="muted">Module is disabled. Enable it to use controls.</p>';
     return;
   }
   if (mod.state !== "started") {
-    $("modDetail").innerHTML =
-      '<p class="muted">' + (mod.description || '') + '</p>' +
-      '<p class="muted" style="margin-top:12px">Click <b>Start</b> to activate this module and show its controls.</p>';
+    $("modControls").innerHTML =
+      '<p class="muted">Module is idle. Click <b>Start</b> above to activate controls.</p>';
     return;
   }
-
   if (mod.name === "wifi_scan") {
-    $("modDetail").innerHTML =
-      '<p class="muted">Scan nearby WiFi networks on demand (does not run in the background when period_ms is 0).</p>' +
+    $("modControls").innerHTML =
+      '<p class="muted">Scan nearby WiFi networks on demand.</p>' +
       '<div class="mod-detail-tools">' +
       '<select id="wifiScanBand"><option value="both">Both bands</option>' +
       '<option value="2">2.4 GHz</option><option value="5">5 GHz</option></select>' +
@@ -447,7 +482,7 @@ function renderModuleDetail() {
     return;
   }
   if (mod.name === "i2c_scanner") {
-    $("modDetail").innerHTML =
+    $("modControls").innerHTML =
       '<p class="muted">Probe the I2C bus for responding devices.</p>' +
       '<div class="mod-detail-tools"><button id="i2cScanBtn">Scan now</button></div>' +
       '<div id="i2cScanOut"></div>';
@@ -455,42 +490,128 @@ function renderModuleDetail() {
     return;
   }
   if (mod.name === "system_info") {
-    $("modDetail").innerHTML =
-      '<p class="muted">Logs heap and scheduler stats on an interval when period_ms &gt; 0. Fetch a snapshot below.</p>' +
+    $("modControls").innerHTML =
+      '<p class="muted">Fetch a live diagnostics snapshot from the kernel.</p>' +
       '<div class="mod-detail-tools"><button id="sysInfoBtn">Refresh snapshot</button></div>' +
       '<pre id="sysInfoOut" class="muted" style="margin-top:8px;white-space:pre-wrap"></pre>';
     $("sysInfoBtn").onclick = runSystemInfoSnapshot;
     return;
   }
   if (mod.name === "gpio_blink") {
-    $("modDetail").innerHTML =
-      '<p class="muted">Toggles the user LED on a schedule while this module is started.</p>';
+    $("modControls").innerHTML =
+      '<p class="muted">The onboard LED is toggling while this module is started.</p>';
     return;
   }
   if (mod.name === "hello_world") {
-    $("modDetail").innerHTML =
-      '<p class="muted">Logs a greeting and periodic heartbeat while started.</p>';
+    $("modControls").innerHTML =
+      '<p class="muted">Heartbeat lines appear in Diagnostics → Live log while started.</p>';
     return;
   }
-  $("modDetail").innerHTML = '<p class="muted">' + (mod.description || "No extra controls for this module.") + '</p>';
+  $("modControls").innerHTML =
+    '<p class="muted">' + (mod.description || "No extra controls for this module.") + '</p>';
 }
 
-async function loadModulesTab() {
+async function loadModuleSettingsForm() {
+  const mod = currentModule();
+  if (!mod) {
+    $("modSettings").innerHTML = "";
+    return;
+  }
+  const fields = MOD_SETTINGS[mod.name];
+  if (!fields) {
+    $("modSettings").innerHTML =
+      '<p class="muted">No settings form for this module. Use the Config tab for raw JSON.</p>';
+    return;
+  }
+  $("modSettings").innerHTML = '<div class="muted">Loading settings…</div>';
+  try {
+    const d = await fetch("/api/v1/config?namespace=" +
+      encodeURIComponent(mod.name)).then(r => r.json());
+    modSettingsCache = d.values || {};
+    let html = fields.map(f => {
+      const val = modSettingsCache[f.key];
+      if (f.type === "bool") {
+        return '<div class="mod-field"><span class="k">' + f.label + '</span>' +
+          '<label><input type="checkbox" id="modset_' + f.key + '"' +
+          (val ? ' checked' : '') + '> Enabled</label></div>';
+      }
+      if (f.type === "select") {
+        return '<div class="mod-field"><span class="k">' + f.label + '</span>' +
+          '<select id="modset_' + f.key + '">' +
+          f.options.map(o =>
+            '<option value="' + o + '"' + (String(val) === o ? ' selected' : '') +
+            '>' + o + '</option>').join("") + '</select></div>';
+      }
+      const inputType = f.type === "number" ? "number" : "text";
+      return '<div class="mod-field"><span class="k">' + f.label + '</span>' +
+        '<input type="' + inputType + '" id="modset_' + f.key + '" value="' +
+        (val !== undefined && val !== null ? String(val).replace(/"/g, "&quot;") : "") +
+        '"></div>';
+    }).join("");
+    html += '<button id="modSettingsSave" style="margin-top:12px">Save settings</button>' +
+      '<div class="muted" id="modSettingsMsg" style="margin-top:8px">' +
+      'Changes apply on next start (or reboot for auto-start).</div>';
+    $("modSettings").innerHTML = html;
+    $("modSettingsSave").onclick = saveModuleSettings;
+  } catch (e) {
+    $("modSettings").innerHTML = '<div class="muted">Failed to load settings.</div>';
+  }
+}
+
+async function saveModuleSettings() {
+  const mod = currentModule();
+  const fields = MOD_SETTINGS[mod.name];
+  if (!mod || !fields) return;
+  const values = {};
+  for (const f of fields) {
+    const el = $("modset_" + f.key);
+    if (!el) continue;
+    if (f.type === "bool") values[f.key] = el.checked;
+    else if (f.type === "number") values[f.key] = Number(el.value);
+    else values[f.key] = el.value;
+  }
+  $("modSettingsMsg").textContent = "Saving…";
+  const d = await saveConfig(mod.name, values, $("modSettingsMsg"));
+  if (d) await loadModulesTab(true);
+}
+
+function renderModulePanel() {
+  renderModHeader();
+  renderModControls();
+  if (modSubPane === "settings") loadModuleSettingsForm();
+}
+
+async function loadModulesTab(keepSelection) {
   try {
     const d = await api("modules");
     moduleCatalog = d.modules || [];
-    if (selectedModule && !moduleCatalog.some(m => m.name === selectedModule)) {
+    const sel = $("modSelect");
+    const prev = keepSelection ? selectedModule : null;
+    sel.innerHTML = moduleCatalog.map(m =>
+      '<option value="' + m.name + '">' + m.name + ' (' + m.state + ')</option>'
+    ).join("");
+    if (prev && moduleCatalog.some(m => m.name === prev)) {
+      selectedModule = prev;
+    } else if (moduleCatalog.length) {
+      selectedModule = moduleCatalog[0].name;
+    } else {
       selectedModule = null;
     }
-    if (!selectedModule && moduleCatalog.length) {
-      selectedModule = moduleCatalog[0].name;
-    }
-    renderModuleList();
-    renderModuleDetail();
+    sel.value = selectedModule || "";
+    renderModulePanel();
   } catch (e) {
-    $("modList").innerHTML = '<div class="muted">Failed to load modules.</div>';
+    $("modHeader").innerHTML = '<div class="muted">Failed to load modules.</div>';
   }
 }
+
+$("modSelect").onchange = () => {
+  selectedModule = $("modSelect").value;
+  renderModulePanel();
+};
+$("modRefresh").onclick = () => loadModulesTab(true);
+document.querySelectorAll(".mod-subnav button").forEach(btn => {
+  btn.onclick = () => setModSubPane(btn.dataset.modpane);
+});
 
 async function runWifiScan() {
   const band = $("wifiScanBand").value;
@@ -559,7 +680,7 @@ function connectWs() {
     }
     else if (d.type === "module") {
       refresh();
-      if ($("panel-modules").classList.contains("active")) loadModulesTab();
+      if ($("panel-modules").classList.contains("active")) loadModulesTab(true);
     }
     else if (d.type === "ota") {
       if (d.done) $("otamsg").textContent = "Update complete — rebooting.";

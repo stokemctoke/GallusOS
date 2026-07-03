@@ -5,7 +5,7 @@
 
 # GallusOS: A Modular Embedded Operating Environment
 
-**Current release:** [v0.1.0](https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.0) — kernel & services stack, compile-time modules, captive WiFi provisioning, browser dashboard (REST v1 + WebSocket), OTA rollback, charge mode, WiFi re-provision, config editor, diagnostics, mDNS, dual-band WiFi scan module, host simulation, SDK CLI.
+**Current release:** [v0.1.1](https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.1) — Modules dashboard with on-demand control, module lifecycle API, WiFi scan fixes, REST explorer POST support.
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
@@ -358,7 +358,7 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 
 | Version | Value |
 |---|---|
-| Firmware | 0.1.0 |
+| Firmware | 0.1.1 |
 | REST API | v1 |
 | Module API | v1 (frozen — see [docs/MODULE_API.md](docs/MODULE_API.md)) |
 

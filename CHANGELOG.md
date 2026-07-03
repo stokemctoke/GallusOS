@@ -3,6 +3,38 @@
 All notable changes to GallusOS are documented here. The project follows
 [Semantic Versioning](https://semver.org/) for firmware and module manifests.
 
+## [0.1.1] — 2026-07-03
+
+Patch release: module lifecycle, on-demand diagnostics, and dashboard polish since v0.1.0.
+
+### Dashboard
+
+- **Modules tab** — dropdown module picker, Controls / Settings split, start/stop/enable/disable
+- Module-specific controls: WiFi scan table, I2C address list, system info snapshot
+- **REST explorer** — GET / POST / PUT method selector and optional JSON body
+
+### Modules & API
+
+- **Module runtime control** — `POST /api/v1/modules/<name>/{start|stop|enable|disable}`
+- **On-demand defaults** — survey modules (`wifi_scan`, `i2c_scanner`, `system_info`) use `auto_start: false` and `period_ms: 0`
+- **`auto_start` config key** — per-module boot behaviour without disabling entirely
+- **Module POST route fix** — single trailing-wildcard handler `/api/v1/modules/*` (ESP-IDF requirement)
+
+### Fixes
+
+- **`wifi_scan` boot loop** — heap-allocated scan results, no synchronous scan on main task
+- **WiFi scan while connected** — single scan pass with channel band filter (no `esp_wifi_set_band()` while STA linked)
+
+### Flashing
+
+Same as v0.1.0 — OTA upload of `build/gallus_os.bin` or USB flash. After upgrade, set survey module config if old LittleFS values still auto-scan:
+
+```json
+{ "auto_start": false, "period_ms": 0 }
+```
+
+[0.1.1]: https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.1
+
 ## [0.1.0] — 2026-07-03
 
 First public release of GallusOS on **Seeed XIAO ESP32-C5** (ESP-IDF 5.5.1).

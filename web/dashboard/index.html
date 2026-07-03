@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GallusOS</title>
+<style>
+  :root {
+    --bg0:#0E0E12; --bg1:#15151B; --bg2:#1C1C24; --bg3:#26262F;
+    --acc0:#E8900A; --acc1:#F5B445; --acc2:#C45C12; --acc3:#8B3A0F;
+    --tx0:#F2EDE6; --tx1:#9E9890; --tx2:#504A44;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg0); color:var(--tx0);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 20px; background:var(--bg1);
+    border-bottom:1px solid var(--bg3);
+  }
+  header h1 { font-size:20px; margin:0; letter-spacing:.5px; }
+  header h1 span { color:var(--acc0); }
+  .status-dot { width:10px; height:10px; border-radius:50%;
+    background:var(--tx2); display:inline-block; margin-right:6px; }
+  .status-dot.live { background:var(--acc1); box-shadow:0 0 8px var(--acc0); }
+  .conn { font-size:13px; color:var(--tx1); }
+  main { padding:20px; max-width:960px; margin:0 auto;
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+    gap:16px; }
+  .card { background:var(--bg2); border:1px solid var(--bg3);
+    border-radius:12px; padding:18px; }
+  .card h2 { margin:0 0 12px; font-size:13px; text-transform:uppercase;
+    letter-spacing:1px; color:var(--acc0); font-weight:600; }
+  .row { display:flex; justify-content:space-between; padding:5px 0;
+    font-size:14px; border-bottom:1px solid var(--bg3); }
+  .row:last-child { border-bottom:none; }
+  .row .k { color:var(--tx1); }
+  .row .v { color:var(--tx0); font-variant-numeric:tabular-nums; }
+  .bar { height:8px; background:var(--bg3); border-radius:4px;
+    overflow:hidden; margin-top:8px; }
+  .bar > i { display:block; height:100%; width:0;
+    background:linear-gradient(90deg,var(--acc2),var(--acc1));
+    transition:width .4s ease; }
+  .modules .mod { display:flex; align-items:center; gap:8px; padding:6px 0;
+    font-size:14px; }
+  .pill { font-size:11px; padding:2px 8px; border-radius:10px;
+    background:var(--bg3); color:var(--tx1); }
+  .pill.started { background:var(--acc3); color:var(--tx0); }
+  .full { grid-column:1/-1; }
+  button { background:var(--acc0); color:var(--bg0); border:none;
+    border-radius:8px; padding:10px 16px; font-weight:600; cursor:pointer;
+    font-size:14px; }
+  button:disabled { opacity:.5; cursor:default; }
+  input[type=file] { color:var(--tx1); font-size:13px; }
+  .ota-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .muted { color:var(--tx1); font-size:12px; margin-top:8px; }
+  footer { text-align:center; color:var(--tx2); font-size:12px;
+    padding:20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>GALLUS<span>OS</span></h1>
+  <div class="conn"><span id="dot" class="status-dot"></span>
+    <span id="connText">connecting</span></div>
+</header>
+
+<main>
+  <div class="card">
+    <h2>System</h2>
+    <div class="row"><span class="k">Firmware</span><span class="v" id="fw">-</span></div>
+    <div class="row"><span class="k">ESP-IDF</span><span class="v" id="idf">-</span></div>
+    <div class="row"><span class="k">Uptime</span><span class="v" id="uptime">-</span></div>
+    <div class="row"><span class="k">Free heap</span><span class="v" id="heap">-</span></div>
+    <div class="row"><span class="k">Boots</span><span class="v" id="boots">-</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Battery</h2>
+    <div class="row"><span class="k">Charge</span><span class="v" id="batpct">-</span></div>
+    <div class="row"><span class="k">Voltage</span><span class="v" id="batmv">-</span></div>
+    <div class="bar"><i id="batbar"></i></div>
+  </div>
+
+  <div class="card">
+    <h2>Network</h2>
+    <div class="row"><span class="k">WiFi</span><span class="v" id="wifi">-</span></div>
+    <div class="row"><span class="k">IP</span><span class="v" id="ip">-</span></div>
+  </div>
+
+  <div class="card modules full">
+    <h2>Modules</h2>
+    <div id="modules"></div>
+  </div>
+
+  <div class="card full">
+    <h2>Firmware Update</h2>
+    <div class="ota-row">
+      <input type="file" id="fwfile" accept=".bin">
+      <button id="fwbtn">Upload &amp; Flash</button>
+    </div>
+    <div class="bar"><i id="otabar"></i></div>
+    <div class="muted" id="otamsg">Select a .bin firmware image to update over the air.</div>
+  </div>
+</main>
+
+<footer>GallusOS &middot; Gallus Gadgets</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const api = p => fetch("/api/v1/" + p).then(r => r.json());
+
+function fmtUptime(ms) {
+  const s = Math.floor(ms/1000), h = Math.floor(s/3600),
+        m = Math.floor((s%3600)/60);
+  return h + "h " + m + "m " + (s%60) + "s";
+}
+function fmtKB(b) { return (b/1024).toFixed(1) + " KB"; }
+
+async function refresh() {
+  try {
+    const s = await api("system");
+    $("fw").textContent = s.version;
+    $("idf").textContent = s.idf;
+    $("uptime").textContent = fmtUptime(s.uptime_ms);
+    $("heap").textContent = fmtKB(s.free_heap);
+    $("boots").textContent = s.boot_count;
+  } catch (e) {}
+  try {
+    const b = await api("battery");
+    setBattery(b.percent, b.millivolts);
+  } catch (e) {}
+  try {
+    const m = await api("modules");
+    renderModules(m.modules);
+  } catch (e) {}
+}
+
+function setBattery(pct, mv) {
+  $("batpct").textContent = pct + "%";
+  $("batmv").textContent = (mv/1000).toFixed(2) + " V";
+  $("batbar").style.width = pct + "%";
+}
+
+function renderModules(mods) {
+  $("modules").innerHTML = mods.map(m =>
+    '<div class="mod"><span class="pill ' + m.state + '">' + m.state +
+    '</span><b>' + m.name + '</b> <span class="k">v' + m.version +
+    ' &middot; ' + m.category + '</span></div>').join("");
+}
+
+function connectWs() {
+  const ws = new WebSocket("ws://" + location.host + "/ws");
+  ws.onopen = () => { $("dot").classList.add("live");
+    $("connText").textContent = "live"; };
+  ws.onclose = () => { $("dot").classList.remove("live");
+    $("connText").textContent = "reconnecting"; setTimeout(connectWs, 2000); };
+  ws.onmessage = ev => {
+    let d; try { d = JSON.parse(ev.data); } catch(e) { return; }
+    if (d.type === "battery") setBattery(d.pct, d.mv);
+    else if (d.type === "wifi") { $("wifi").textContent = "connected";
+      $("ip").textContent = d.ip; }
+    else if (d.type === "module") refresh();
+    else if (d.type === "ota") {
+      if (d.done) $("otamsg").textContent = "Update complete — rebooting.";
+      else { $("otabar").style.width = d.percent + "%";
+        $("otamsg").textContent = "Flashing… " + d.percent + "%"; }
+    }
+  };
+}
+
+$("fwbtn").onclick = () => {
+  const f = $("fwfile").files[0];
+  if (!f) { $("otamsg").textContent = "Choose a .bin file first."; return; }
+  $("fwbtn").disabled = true;
+  $("otamsg").textContent = "Uploading…";
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/api/v1/ota/upload");
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable) {
+      const p = Math.round(e.loaded/e.total*100);
+      $("otabar").style.width = p + "%";
+      $("otamsg").textContent = "Uploading… " + p + "%";
+    }
+  };
+  xhr.onload = () => { $("otamsg").textContent =
+    xhr.status === 200 ? "Uploaded — device rebooting." :
+    "Update failed (" + xhr.status + ")."; };
+  xhr.onerror = () => { $("otamsg").textContent = "Upload error.";
+    $("fwbtn").disabled = false; };
+  xhr.send(f);
+};
+
+refresh();
+setInterval(refresh, 15000);
+connectWs();
+</script>
+</body>
+</html>

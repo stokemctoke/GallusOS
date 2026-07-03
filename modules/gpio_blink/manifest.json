@@ -1,0 +1,14 @@
+{
+  "name": "gpio_blink",
+  "version": "0.1.0",
+  "description": "Blinks a GPIO through the reservation manager. Defaults to the onboard user LED.",
+  "author": "Gallus Gadgets",
+  "license": "PolyForm-Perimeter-1.0.0",
+  "category": "GPIO",
+  "menu_icon": "led",
+  "required_services": ["config", "scheduler", "gpio"],
+  "required_gpio": [27],
+  "events_published": ["GPIOChanged"],
+  "events_consumed": [],
+  "capabilities": []
+}

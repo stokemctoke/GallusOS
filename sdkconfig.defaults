@@ -1,0 +1,27 @@
+# GallusOS build defaults — XIAO ESP32-C5, ESP-IDF 5.5.1
+
+CONFIG_IDF_TARGET="esp32c5"
+
+# Flash
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Language / error-handling convention: no exceptions, no RTTI
+# (both are IDF defaults; pinned here so nobody flips them by accident)
+# CONFIG_COMPILER_CXX_EXCEPTIONS is not set
+# CONFIG_COMPILER_CXX_RTTI is not set
+
+# FreeRTOS: 1 ms tick for millisecond-resolution scheduling
+CONFIG_FREERTOS_HZ=1000
+
+# Logging
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_COLORS=y
+
+# HTTP server: WebSocket support + enough handlers for API + dashboard
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+
+# OTA: verify new image on first boot, roll back on crash-loop
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y

@@ -1,0 +1,4 @@
+## Managed component dependencies for gallus_services
+dependencies:
+  joltwallet/littlefs: "^1"
+  espressif/mdns: "^1"

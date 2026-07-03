@@ -1,0 +1,42 @@
+GallusOS
+Copyright 2026 Gallus Gadgets. All rights reserved.
+
+Licensed under the PolyForm Perimeter License 1.0.0.
+See the LICENSE file for the full terms.
+
+--------------------------------------------------------------------
+Plain-language summary (not a substitute for the LICENSE file)
+--------------------------------------------------------------------
+
+You MAY, free of charge:
+  - Use GallusOS for any purpose, including commercially.
+  - Modify it and create your own modules, drivers and services.
+  - Distribute it, including inside hardware products you sell.
+  - Sell products (devices, gadgets, applications, modules) that
+    run on or are built on top of GallusOS.
+
+You MUST:
+  - Keep this attribution. Anyone who receives GallusOS (or a fork
+    or derivative) from you must also receive the LICENSE terms and
+    the "Required Notice" attribution line:
+
+        Required Notice: Copyright 2026 Gallus Gadgets. GallusOS
+        (https://github.com/GallusGadgets/GallusOS)
+
+You MAY NOT:
+  - Provide to others any product that competes with GallusOS
+    itself. In plain terms: you cannot take GallusOS (or a rebrand
+    or fork of it) and sell or offer it AS an operating system,
+    firmware platform, or SDK that substitutes for GallusOS.
+
+In short: build and sell whatever you like ON GallusOS, but do not
+sell GallusOS itself, and always give credit.
+
+--------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------
+
+GallusOS builds on the following, under their own licenses:
+  - ESP-IDF and its components (Apache-2.0) - Espressif Systems
+  - joltwallet/littlefs (MIT)
+  - espressif/mdns (Apache-2.0)

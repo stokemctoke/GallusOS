@@ -1,0 +1,14 @@
+{
+  "name": "hello_world",
+  "version": "0.1.0",
+  "description": "Minimal example module demonstrating the GallusOS SDK: config, scheduler and logging.",
+  "author": "Gallus Gadgets",
+  "license": "PolyForm-Perimeter-1.0.0",
+  "category": "Examples",
+  "menu_icon": "wave",
+  "required_services": ["config", "scheduler"],
+  "required_gpio": [],
+  "events_published": [],
+  "events_consumed": [],
+  "capabilities": []
+}

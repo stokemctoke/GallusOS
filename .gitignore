@@ -1,0 +1,71 @@
+# =============================================================================
+# GallusOS — files not required to compile from a fresh clone
+# =============================================================================
+
+# --- ESP-IDF build tree (removed by `idf.py clean` / `idf.py fullclean`) ---
+build/
+
+# --- Generated Kconfig (created from sdkconfig.defaults on first configure) ---
+sdkconfig
+sdkconfig.old
+sdkconfig.old.*
+
+# --- Component Manager downloads (re-fetched automatically on build) ---
+managed_components/
+
+# --- Local flash / debug artefacts (never commit) ---
+*.bin
+*.elf
+*.map
+flash_project_args
+flash_args
+.gdbinit/
+
+# --- IDE and editor ---
+.vscode/
+.idea/
+*.code-workspace
+.clangd
+.clang-format-cache
+
+# --- Python (tools scripts, optional venv for image codegen) ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tools/.venv/
+venv/
+.env
+.env.*
+
+# --- OS metadata ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Editor / merge backups ---
+*~
+*.swp
+*.swo
+*.bak
+*.orig
+
+# --- Logs and crash dumps ---
+*.log
+openocd.log
+core
+core.*
+
+# --- Coverage and test output ---
+coverage/
+*.gcno
+*.gcda
+*.gcov
+
+# --- Standalone CMake output (if ever run outside IDF build/) ---
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+compile_commands.json

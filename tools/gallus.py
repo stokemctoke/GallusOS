@@ -305,6 +305,23 @@ def cmd_validate_all(_: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def cmd_host_sim(_: argparse.Namespace) -> int:
+    """Build and run the desktop kernel harness."""
+    host_dir = ROOT / "host"
+    build_dir = host_dir / "build"
+    binary = build_dir / "gallus_host_sim"
+
+    for cmd in (
+        ["cmake", "-S", str(host_dir), "-B", str(build_dir)],
+        ["cmake", "--build", str(build_dir), "-j"],
+    ):
+        rc = subprocess.call(cmd, cwd=ROOT)
+        if rc != 0:
+            return rc
+
+    return subprocess.call([str(binary)], cwd=ROOT)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="gallus",
                                      description="GallusOS SDK CLI")
@@ -336,6 +353,10 @@ def main() -> int:
     validate_all = sub.add_parser("validate-all",
                                   help="validate every module manifest")
     validate_all.set_defaults(func=cmd_validate_all)
+
+    host_sim = sub.add_parser("host-sim",
+                              help="build and run the desktop kernel harness")
+    host_sim.set_defaults(func=cmd_host_sim)
 
     build = sub.add_parser("build", help="run idf.py build")
     build.set_defaults(func=lambda _: run_idf(["build"]))

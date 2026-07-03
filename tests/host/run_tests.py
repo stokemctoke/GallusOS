@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TEST_FILE = ROOT / "tests" / "host" / "test_manifest_gen.py"
+HOST_SIM = ROOT / "host" / "build" / "gallus_host_sim"
 
 
 def load_tests():
@@ -17,6 +19,16 @@ def load_tests():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def run_host_sim() -> int:
+    rc = subprocess.call([sys.executable, str(ROOT / "tools" / "gallus.py"),
+                          "host-sim"], cwd=ROOT)
+    if rc == 0:
+        print("PASS host_sim")
+    else:
+        print(f"FAIL host_sim (exit {rc})")
+    return rc
 
 
 def main() -> int:
@@ -35,7 +47,10 @@ def main() -> int:
         except AssertionError as exc:
             failed += 1
             print(f"FAIL {name}: {exc}")
-    return 1 if failed else 0
+    rc = 1 if failed else 0
+    if run_host_sim() != 0:
+        rc = 1
+    return rc
 
 
 if __name__ == "__main__":

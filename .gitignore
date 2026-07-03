@@ -8,6 +8,9 @@ Development-Prompt.txt
 # --- ESP-IDF build tree (removed by `idf.py clean` / `idf.py fullclean`) ---
 build/
 
+# --- Host simulation CMake output ---
+host/build/
+
 # --- Generated Kconfig (created from sdkconfig.defaults on first configure) ---
 sdkconfig
 sdkconfig.old

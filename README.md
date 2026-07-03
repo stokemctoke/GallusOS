@@ -230,8 +230,9 @@ GallusOS/
 │   ├── system_info/            Periodic diagnostics logging
 │   └── i2c_scanner/            I2C bus scan demo
 ├── web/dashboard/              Browser dashboard (embedded at build time)
+├── host/                       Desktop kernel harness (pthread shims + CMake)
 ├── tools/                      Manifest codegen, SDK CLI, image tool
-├── tests/host/                 Host-side manifest validation tests
+├── tests/host/                 Host-side manifest + kernel simulation tests
 ├── assets/splash/              Source PNGs for boot splash (optional regen)
 ├── partitions.csv              Flash partition table
 ├── sdkconfig.defaults          Default Kconfig (committed; sdkconfig is not)
@@ -275,7 +276,7 @@ Disable a module at runtime via config: namespace `modules`, key `<name>` =
 
 | Script | Purpose |
 |---|---|
-| `tools/gallus.py` | SDK CLI: `create-module`, `create-service`, `create-driver`, `validate-module`, `validate-all`, `build`, `flash`, `monitor` |
+| `tools/gallus.py` | SDK CLI: `create-module`, `create-service`, `create-driver`, `validate-module`, `validate-all`, `host-sim`, `build`, `flash`, `monitor` |
 | `tools/gallus_manifest_gen.py` | Validates `manifest.json`, emits C++ registration |
 | `tools/gallus_module.cmake` | CMake macro called from module `CMakeLists.txt` |
 | `tools/gallus_image_gen.py` | Converts 128×64 PNG splash art to SSD1306 C arrays |
@@ -284,7 +285,23 @@ Run host tests (no hardware required):
 
 ```bash
 python3 tests/host/run_tests.py
+# or build + run the kernel harness directly:
+python3 tools/gallus.py host-sim
 ```
+
+### Host simulation
+
+GallusOS can boot its **kernel** (event bus + scheduler) on Linux using
+pthread shims in `host/shim/`. This is not a chip emulator — it runs the
+same kernel sources as firmware to validate event delivery and scheduled
+jobs without flashing.
+
+```bash
+python3 tools/gallus.py host-sim
+```
+
+Next steps for host sim: mock services (`ConfigService`, `GpioService`),
+then run compile-time modules through `ModuleManager` on the desktop.
 
 To regenerate splash bitmaps (optional — pre-generated header is committed):
 
@@ -325,7 +342,8 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | 5 | Display, battery, OTA, web dashboard | Done |
 | 6 | SDK CLI, diagnostics UI, REST explorer, filesystem browser, host tests, CI | Done |
 | 7 | Config REST API, Settings tab, DiagnosticsService, live log stream, charge mode | Done |
-| 8 | WiFi re-provision, config editor, README header (partial) | In progress |
+| 8 | WiFi re-provision, config editor, README header | Done |
+| 9 | Host simulation (kernel harness) | In progress |
 
 | Version | Value |
 |---|---|
@@ -333,9 +351,15 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | REST API | v1 |
 | Module API | not yet frozen |
 
-Phase 8 is partially complete on **`master`**.
+Phase 9 work is on branch **`stage-9`**.
 
-### Phase 8 additions (done)
+### Phase 9 additions (in progress)
+
+- **`host/`** — desktop kernel harness with FreeRTOS/esp_timer/esp_log shims
+- **`tools/gallus.py host-sim`** — build and run the harness from the SDK CLI
+- **CI** — host sim runs in `tests/host/run_tests.py`
+
+### Phase 8 additions
 
 - **WiFi re-provision** — change SSID/password from Settings and reconnect without factory reset
 - **Dashboard config editor** — browse and edit any config namespace as JSON
@@ -358,12 +382,12 @@ Phase 8 is partially complete on **`master`**.
 - **SDK CLI:** `create-service`, `create-driver` scaffolds
 - **Fixes:** Network card WiFi/IP on page load; provisioning portal takes precedence over dashboard on `GET /`
 
-### Phase 8 / 9 (remaining)
+### Phase 9 / 10 (remaining)
 
-- **Host simulation** — run modules/services on the desktop for faster iteration
-- **Module API freeze** — document and stabilise the SDK surface for third-party modules
+- **Host simulation** — mock services, then `ModuleManager` + modules on desktop
 - **SDK CLI:** `generate-docs`, `lint`, richer `validate` checks
 - **GitHub release** — tag v0.1.0 with flash instructions and changelog
+- **Module API freeze** — after host sim and CLI polish (last)
 
 ---
 

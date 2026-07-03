@@ -345,7 +345,8 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | 6 | SDK CLI, diagnostics UI, REST explorer, filesystem browser, host tests, CI | Done |
 | 7 | Config REST API, Settings tab, DiagnosticsService, live log stream, charge mode | Done |
 | 8 | WiFi re-provision, config editor, README header | Done |
-| 9 | Host simulation (kernel harness) | In progress |
+| 9 | Host simulation (kernel harness, mock services, hello_world) | Done |
+| 10 | SDK CLI polish, GitHub release, module API freeze (planned) | Planned |
 
 | Version | Value |
 |---|---|
@@ -353,9 +354,9 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | REST API | v1 |
 | Module API | not yet frozen |
 
-Phase 9 work is on branch **`stage-9`**.
+Phase 10 work is on branch **`stage-10`**.
 
-### Phase 9 additions (in progress)
+### Phase 9 additions
 
 - **`host/`** — desktop kernel harness with FreeRTOS/esp_timer/esp_log shims
 - **Mock services** — in-memory storage, config, GPIO, REST, and I2C on Linux
@@ -386,11 +387,11 @@ Phase 9 work is on branch **`stage-9`**.
 - **SDK CLI:** `create-service`, `create-driver` scaffolds
 - **Fixes:** Network card WiFi/IP on page load; provisioning portal takes precedence over dashboard on `GET /`
 
-### Phase 9 / 10 (remaining)
+### Phase 10 (planned)
 
-- **Host simulation** — more modules and service mocks on desktop
 - **SDK CLI:** `generate-docs`, `lint`, richer `validate` checks
 - **GitHub release** — tag v0.1.0 with flash instructions and changelog
+- **Host simulation** — more modules and service mocks on desktop
 - **Module API freeze** — after host sim and CLI polish (last)
 
 ---

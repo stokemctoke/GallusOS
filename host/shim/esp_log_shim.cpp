@@ -12,6 +12,7 @@ namespace {
 constexpr esp_log_level_t kDefaultLevel = ESP_LOG_INFO;
 std::mutex g_mutex;
 std::unordered_map<std::string, esp_log_level_t> g_levels;
+thread_local bool g_line_open = false;
 
 esp_log_level_t levelFor(const char* tag) {
     if (tag == nullptr) {
@@ -30,6 +31,14 @@ const char* levelLetter(esp_log_level_t level) {
         case ESP_LOG_VERBOSE: return "V";
         default: return "?";
     }
+}
+
+bool isPrefixFormat(const char* fmt) {
+    return fmt != nullptr && std::strstr(fmt, " (%u) %s: ") != nullptr;
+}
+
+bool isLineEndFormat(const char* fmt) {
+    return fmt != nullptr && std::strcmp(fmt, LOG_RESET_COLOR "\n") == 0;
 }
 
 }  // namespace
@@ -61,9 +70,12 @@ void esp_log_writev(esp_log_level_t level, const char* tag, const char* fmt,
     if (levelFor(tag) < level) {
         return;
     }
-    std::fprintf(stderr, "%s (%u) %s: ", levelLetter(level),
-                 static_cast<unsigned>(esp_log_timestamp()),
-                 tag != nullptr ? tag : "?");
+    if (!g_line_open) {
+        std::fprintf(stderr, "%s (%u) %s: ", levelLetter(level),
+                     static_cast<unsigned>(esp_log_timestamp()),
+                     tag != nullptr ? tag : "?");
+        g_line_open = true;
+    }
     std::vfprintf(stderr, fmt, args);
 }
 
@@ -71,6 +83,25 @@ void esp_log_write(esp_log_level_t level, const char* tag, const char* fmt,
                    ...) {
     va_list args;
     va_start(args, fmt);
+
+    if (isLineEndFormat(fmt)) {
+        if (levelFor(tag) >= level && g_line_open) {
+            std::fputc('\n', stderr);
+        }
+        g_line_open = false;
+        va_end(args);
+        return;
+    }
+
+    if (isPrefixFormat(fmt)) {
+        if (levelFor(tag) >= level && !g_line_open) {
+            std::vfprintf(stderr, fmt, args);
+            g_line_open = true;
+        }
+        va_end(args);
+        return;
+    }
+
     esp_log_writev(level, tag, fmt, args);
     va_end(args);
 }

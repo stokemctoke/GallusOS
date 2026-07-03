@@ -374,10 +374,17 @@ Status WifiService::startProvisioning() {
                     this, kDnsTaskPriority, &dns_task_);
     }
 
-    // Portal routes: the POST target plus a catch-all GET (serves the
-    // form to any URL, which also triggers phone captive-portal popups).
+    // Portal routes: unregister the dashboard root (registered earlier by
+    // WebUiService) so GET / serves the setup form. Without this, Ubuntu's
+    // captive check (connectivity-check.ubuntu.com → /) hits the dashboard.
+    (void)rest_.unregisterRoute(HTTP_GET, "/");
+
     Status status = rest_.registerRoute(HTTP_POST, "/provision",
                                         &WifiService::portalPostHandler, this);
+    if (status.ok()) {
+        status = rest_.registerRoute(HTTP_GET, "/",
+                                     &WifiService::portalGetHandler, this);
+    }
     if (status.ok()) {
         status = rest_.registerRoute(HTTP_GET, "/*",
                                      &WifiService::portalGetHandler, this);

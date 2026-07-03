@@ -91,10 +91,13 @@ On first boot (or when STA credentials are missing), GallusOS starts a
 SoftAP provisioning portal:
 
 1. Connect to WiFi SSID **`GallusOS-XXXX`** (last four hex digits of the
-   STA MAC address — also shown on the OLED and in the serial log).
-2. Open the captive portal in your browser and enter your home WiFi SSID
-   and password.
-3. The device reboots into STA mode, obtains a DHCP address, and announces
+   STA MAC address — also shown on the OLED and in the serial log). The
+   SoftAP is **open** (no WiFi password).
+2. Your OS should detect the captive portal and open the setup page
+   automatically. If it does not, browse to **`http://192.168.42.1`**
+   (or any URL — DNS is redirected to the portal).
+3. Enter your home WiFi SSID and password, then save.
+4. The device reboots into STA mode, obtains a DHCP address, and announces
    itself via mDNS as **`http://gallus-XXXX.local`**.
 
 Credentials are stored in LittleFS config and persist across reboots.

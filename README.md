@@ -1,14 +1,22 @@
-# GallusOS
+[![Ko-Fi](https://img.shields.io/badge/Ko--Fi-Support%20Me-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/stoke)
+[![Website](https://img.shields.io/badge/Website-stokemctoke.com-FAA307)](https://stokemctoke.com)
+[![Shop](https://img.shields.io/badge/Shop-gallusgadgets.com-E8900A)](https://gallusgadgets.com)
+[![Platform: ESP32-C5](https://img.shields.io/badge/Platform-ESP32--C5-blue)](https://www.espressif.com/en/products/socs/esp32-c5)
 
-**A Modular Embedded Operating Environment** — by [Gallus Gadgets](https://github.com/stokemctoke/GallusOS).
+# GallusOS: A Modular Embedded Operating Environment
+
+**Current release:** [v0.1.0](https://github.com/stokemctoke/GallusOS/tree/master) — kernel & services stack, compile-time modules, captive WiFi provisioning, browser dashboard (REST v1 + WebSocket), OTA rollback, charge mode, WiFi re-provision, config editor, diagnostics, mDNS.
+
+![GallusOS overview](GallusOS_header.jpg)
 
 GallusOS is a reusable embedded operating environment for ESP32-class
-devices. It is built on **ESP-IDF 5.5.1** with modern C++ (no exceptions,
-no RTTI) and provides a layered architecture: kernel, HAL, drivers,
+devices, built on **ESP-IDF 5.5.1** with modern C++ (no exceptions,
+no RTTI). It provides a layered architecture: kernel, HAL, drivers,
 services, compile-time modules, a versioned REST API, a WebSocket push
 channel, and a browser dashboard with over-the-air firmware updates.
 
 Primary target hardware: **Seeed Studio XIAO ESP32-C5** (8 MB flash).
+Active development: [`stage-8`](https://github.com/stokemctoke/GallusOS/tree/stage-8).
 
 ---
 

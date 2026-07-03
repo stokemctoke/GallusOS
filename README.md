@@ -324,7 +324,7 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | REST API | v1 |
 | Module API | not yet frozen |
 
-Phase 7 work is on branch **`stage-7`** (ready to merge to `master`).
+Phase 8 work is on branch **`stage-8`**.
 
 ### Phase 6 additions
 
@@ -343,7 +343,7 @@ Phase 7 work is on branch **`stage-7`** (ready to merge to `master`).
 - **SDK CLI:** `create-service`, `create-driver` scaffolds
 - **Fixes:** Network card WiFi/IP on page load; provisioning portal takes precedence over dashboard on `GET /`
 
-### Phase 8 (planned)
+### Phase 8 (in progress)
 
 - **Host simulation** — run modules/services on the desktop for faster iteration
 - **Module API freeze** — document and stabilise the SDK surface for third-party modules

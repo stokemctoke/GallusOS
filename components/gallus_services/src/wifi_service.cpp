@@ -1,6 +1,7 @@
 #include "gallus/services/wifi_service.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "esp_mac.h"
@@ -175,6 +176,7 @@ Status WifiService::stopRadio() {
     }
 
     radio_stopped_ = true;
+    sta_connected_ = false;
     const esp_err_t err = esp_wifi_stop();
     if (err != ESP_OK) {
         return fromEspErr(err);
@@ -289,12 +291,19 @@ Status scanBand(WifiService::ApRecord* out, size_t max, size_t& total,
         return Status::success();
     }
 
-    wifi_ap_record_t records[WifiService::kMaxScanResults];
     if (ap_count > WifiService::kMaxScanResults) {
         ap_count = static_cast<uint16_t>(WifiService::kMaxScanResults);
     }
+
+    wifi_ap_record_t* records = static_cast<wifi_ap_record_t*>(
+        std::malloc(static_cast<size_t>(ap_count) * sizeof(wifi_ap_record_t)));
+    if (records == nullptr) {
+        return Error::NoMemory;
+    }
+
     err = esp_wifi_scan_get_ap_records(&ap_count, records);
     if (err != ESP_OK) {
+        std::free(records);
         return fromEspErr(err);
     }
 
@@ -305,13 +314,14 @@ Status scanBand(WifiService::ApRecord* out, size_t max, size_t& total,
         copyApRecord(&out[total], records[i], band_ghz);
         ++total;
     }
+    std::free(records);
     return Status::success();
 }
 
 }  // namespace
 
 Result<size_t> WifiService::scan(ApRecord* out, size_t max, ScanBand bands) {
-    if (!initialized_ || provisioning_ || radio_stopped_) {
+    if (!initialized_ || provisioning_ || radio_stopped_ || !sta_connected_) {
         return Error::InvalidState;
     }
     if (out == nullptr || max == 0) {
@@ -415,6 +425,7 @@ void WifiService::wifiEventHandler(void* arg, esp_event_base_t /*base*/,
             break;
 
         case WIFI_EVENT_STA_DISCONNECTED:
+            self->sta_connected_ = false;
             (void)self->events_.publish(
                 Event::make(EventId::WiFiDisconnected));
             if (self->provisioning_ || self->radio_stopped_) {
@@ -458,6 +469,7 @@ void WifiService::ipEventHandler(void* arg, esp_event_base_t /*base*/,
 
     const auto* event = static_cast<ip_event_got_ip_t*>(data);
     self->retry_count_ = 0;
+    self->sta_connected_ = true;
 
     ConnectedPayload payload = {};
     payload.ip[0] = esp_ip4_addr1(&event->ip_info.ip);

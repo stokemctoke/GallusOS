@@ -121,6 +121,7 @@ private:
     RestService& rest_;
     bool provisioning_ = false;
     bool radio_stopped_ = false;
+    bool sta_connected_ = false;
     bool initialized_ = false;
 };
 

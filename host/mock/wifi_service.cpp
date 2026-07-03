@@ -12,6 +12,7 @@ constexpr const char* kTag = "WiFi";
 
 Status WifiService::init() {
     initialized_ = true;
+    sta_connected_ = true;
     Log::info(kTag, "host stub — radio not started");
     return Status::success();
 }

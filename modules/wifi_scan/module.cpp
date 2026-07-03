@@ -40,7 +40,6 @@ public:
             return job.status();
         }
         job_ = job.value();
-        tick(this);
         return gallus::Status::success();
     }
 

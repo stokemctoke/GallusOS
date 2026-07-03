@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, stage-11]
+    branches: [master]
   pull_request:
-    branches: [master, stage-11]
+    branches: [master]
 
 jobs:
   host-tests:

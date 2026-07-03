@@ -353,6 +353,7 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | 8 | WiFi re-provision, config editor, README header | Done |
 | 9 | Host simulation (kernel harness, mock services, hello_world) | Done |
 | 10 | SDK CLI polish, GitHub release, wifi_scan, module API freeze | Done |
+| 11 | Module runtime control, wifi_scan fixes, REST explorer POST | Done |
 
 | Version | Value |
 |---|---|
@@ -360,7 +361,11 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | REST API | v1 |
 | Module API | v1 (frozen — see [docs/MODULE_API.md](docs/MODULE_API.md)) |
 
-Phase 11 work is on branch **`stage-11`**.
+### Phase 11 additions
+
+- **Module runtime control** — `POST /api/v1/modules/<name>/start|stop|enable|disable`
+- **`wifi_scan` fixes** — boot-loop stack overflow; connected dual-band scan without `esp_wifi_set_band()`
+- **REST explorer** — method selector (GET/POST/PUT) and optional JSON body in the dashboard
 
 ### Phase 9 additions
 

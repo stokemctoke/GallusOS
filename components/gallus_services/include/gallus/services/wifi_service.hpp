@@ -58,6 +58,11 @@ public:
     /// Reconnect STA using saved credentials after stopRadio().
     Status resumeSta();
 
+    /// Disconnect and reconnect STA using credentials from config
+    /// (after a WiFi namespace update). Not available in provisioning or
+    /// charge mode.
+    Status reconnectSta();
+
     [[nodiscard]] bool provisioning() const { return provisioning_; }
 
 private:

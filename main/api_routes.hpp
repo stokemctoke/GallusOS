@@ -9,6 +9,7 @@
 #include "gallus/services/gpio_service.hpp"
 #include "gallus/services/i2c_service.hpp"
 #include "gallus/services/rest_service.hpp"
+#include "gallus/services/wifi_service.hpp"
 #include "gallus/services/storage_service.hpp"
 
 /// @file api_routes.hpp
@@ -26,6 +27,7 @@ struct ApiContext {
     sdk::ModuleManager* modules;
     services::BatteryService* battery;
     services::PowerModeService* power;
+    services::WifiService* wifi;
     Kernel* kernel;
 };
 

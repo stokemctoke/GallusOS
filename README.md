@@ -171,6 +171,7 @@ logged at startup.
 | `POST` | `/api/v1/system/reboot` | Reboot the device |
 | `POST` | `/api/v1/system/reset` | Erase saved settings and reboot |
 | `POST` | `/api/v1/system/charge-mode` | Enter/exit charge mode (`{"enable":true}`) |
+| `POST` | `/api/v1/system/wifi-reconnect` | Reconnect STA using saved WiFi credentials |
 | `GET` | `/api/v1/endpoints` | Catalogue of built-in API routes |
 | `POST` | `/api/v1/ota/upload` | Raw firmware binary (same file as `build/gallus_os.bin`) |
 
@@ -345,9 +346,10 @@ Phase 8 work is on branch **`stage-8`**.
 
 ### Phase 8 (in progress)
 
+- **WiFi re-provision** — change SSID/password from Settings and reconnect without factory reset
+- **Dashboard config editor** — browse and edit any config namespace as JSON
 - **Host simulation** — run modules/services on the desktop for faster iteration
 - **Module API freeze** — document and stabilise the SDK surface for third-party modules
-- **Dashboard config editor** — edit namespaces beyond the Settings tab shortcuts
 - **SDK CLI:** `generate-docs`, `lint`, richer `validate` checks
 
 ---

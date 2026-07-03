@@ -285,7 +285,7 @@ esp_err_t configPutHandler(httpd_req_t* req) {
         return ESP_OK;
     }
 
-    char body[512] = {};
+    char body[2048] = {};
     const int received = httpd_req_recv(req, body, sizeof(body) - 1);
     if (received <= 0) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
@@ -418,6 +418,28 @@ esp_err_t chargeModeHandler(httpd_req_t* req) {
     return sendJson(req, out);
 }
 
+esp_err_t wifiReconnectHandler(httpd_req_t* req) {
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (!ctx->rest->authorize(req)) {
+        return ESP_OK;
+    }
+    if (ctx->wifi == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "wifi service unavailable");
+    }
+
+    const Status status = ctx->wifi->reconnectSta();
+    if (!status.ok()) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                   status.message());
+    }
+
+    cJSON* doc = cJSON_CreateObject();
+    cJSON_AddBoolToObject(doc, "ok", true);
+    cJSON_AddStringToObject(doc, "action", "wifi_reconnect");
+    return sendJson(req, doc);
+}
+
 esp_err_t filesListHandler(httpd_req_t* req) {
     auto* ctx = static_cast<ApiContext*>(req->user_ctx);
     if (!ctx->rest->authorize(req)) {
@@ -530,6 +552,8 @@ esp_err_t endpointsHandler(httpd_req_t* req) {
         {"POST", "/api/v1/system/reboot", "Reboot the device"},
         {"POST", "/api/v1/system/reset", "Erase saved settings and reboot"},
         {"POST", "/api/v1/system/charge-mode", "Enter or exit charge mode"},
+        {"POST", "/api/v1/system/wifi-reconnect",
+         "Reconnect STA using saved WiFi credentials"},
         {"GET", "/api/v1/endpoints", "This list"},
         {"POST", "/api/v1/ota/upload", "Upload firmware binary"},
     };
@@ -608,6 +632,11 @@ Status registerApiRoutes(ApiContext& ctx) {
     }
     status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/system/charge-mode",
                                      &chargeModeHandler, &ctx);
+    if (!status.ok()) {
+        return status;
+    }
+    status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/system/wifi-reconnect",
+                                     &wifiReconnectHandler, &ctx);
     if (!status.ok()) {
         return status;
     }

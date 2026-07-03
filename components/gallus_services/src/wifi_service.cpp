@@ -205,6 +205,27 @@ Status WifiService::resumeSta() {
     return startSta(ssid, password);
 }
 
+Status WifiService::reconnectSta() {
+    if (!initialized_ || provisioning_ || radio_stopped_) {
+        return Error::InvalidState;
+    }
+
+    char ssid[33] = {};
+    char password[65] = {};
+    (void)config_.getString("wifi", "ssid", ssid, sizeof(ssid), "");
+    (void)config_.getString("wifi", "password", password, sizeof(password),
+                            "");
+    if (ssid[0] == '\0') {
+        return Error::InvalidArg;
+    }
+
+    retry_count_ = 0;
+    (void)esp_wifi_disconnect();
+    (void)esp_wifi_stop();
+    Log::info(kTag, "reconnecting to '%s'...", ssid);
+    return startSta(ssid, password);
+}
+
 void WifiService::applyStaticIp() {
     if (!config_.getBool("network", "use_static_ip", false)) {
         Log::info(kTag, "using DHCP");

@@ -141,7 +141,7 @@ extern "C" void app_main(void) {
     static gallus::app::ApiContext api_ctx = {&rest,    &config, &diagnostics,
                                               &gpio,    &storage, &i2c,
                                               &modules, &battery, &power_mode,
-                                              &kernel};
+                                              &wifi,    &kernel};
     check("api routes", gallus::app::registerApiRoutes(api_ctx));
 
     check("ota init", ota.init());

@@ -5,6 +5,8 @@
 #include "cJSON.h"
 #include "esp_idf_version.h"
 #include "esp_mac.h"
+#include "esp_netif.h"
+#include "esp_netif_ip_addr.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -38,6 +40,47 @@ void fillHostname(const services::ConfigService* config, char* out,
     } else {
         snprintf(out, cap, "%s", fallback);
     }
+}
+
+void addNetworkFields(cJSON* doc, const ApiContext* ctx) {
+    const bool charge =
+        ctx->power != nullptr && ctx->power->chargeMode();
+    cJSON_AddBoolToObject(doc, "wifi_connected", false);
+    cJSON_AddStringToObject(doc, "ip", "");
+    cJSON_AddStringToObject(doc, "wifi_ssid", "");
+
+    if (charge) {
+        cJSON_AddStringToObject(doc, "wifi_status", "charge mode");
+        return;
+    }
+
+    char ssid[33] = {};
+    if (ctx->config != nullptr) {
+        (void)ctx->config->getString("wifi", "ssid", ssid, sizeof(ssid), "");
+    }
+    if (ssid[0] != '\0') {
+        cJSON_AddStringToObject(doc, "wifi_ssid", ssid);
+    }
+
+    esp_netif_t* sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta == nullptr) {
+        cJSON_AddStringToObject(doc, "wifi_status", "disconnected");
+        return;
+    }
+
+    esp_netif_ip_info_t ip_info = {};
+    if (esp_netif_get_ip_info(sta, &ip_info) != ESP_OK ||
+        ip_info.ip.addr == 0) {
+        cJSON_AddStringToObject(doc, "wifi_status", "connecting");
+        return;
+    }
+
+    char ip_str[16] = {};
+    snprintf(ip_str, sizeof(ip_str), IPSTR, IP2STR(&ip_info.ip));
+    cJSON_AddStringToObject(doc, "ip", ip_str);
+    cJSON_ReplaceItemInObject(doc, "wifi_connected",
+                              cJSON_CreateBool(true));
+    cJSON_AddStringToObject(doc, "wifi_status", "connected");
 }
 
 /// Serialize @p doc, send it, and free everything.
@@ -77,6 +120,7 @@ esp_err_t systemHandler(httpd_req_t* req) {
     if (ctx->power != nullptr) {
         cJSON_AddBoolToObject(doc, "charge_mode", ctx->power->chargeMode());
     }
+    addNetworkFields(doc, ctx);
     return sendJson(req, doc);
 }
 

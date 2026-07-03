@@ -202,6 +202,18 @@ function fmtUptime(ms) {
 }
 function fmtKB(b) { return (b/1024).toFixed(1) + " KB"; }
 
+function setNetworkStatus(s) {
+  if (!s) return;
+  if (s.wifi_ssid && s.wifi_connected) {
+    $("wifi").textContent = s.wifi_ssid;
+  } else if (s.wifi_status) {
+    $("wifi").textContent = s.wifi_status;
+  } else {
+    $("wifi").textContent = s.wifi_connected ? "connected" : "-";
+  }
+  $("ip").textContent = s.ip || "-";
+}
+
 async function refresh() {
   try {
     const s = await api("system");
@@ -211,6 +223,7 @@ async function refresh() {
     $("heap").textContent = fmtKB(s.free_heap);
     $("boots").textContent = s.boot_count;
     if (s.hostname) $("host").textContent = s.hostname + ".local";
+    setNetworkStatus(s);
   } catch (e) {}
   try {
     const b = await api("battery");
@@ -244,9 +257,11 @@ function connectWs() {
   ws.onmessage = ev => {
     let d; try { d = JSON.parse(ev.data); } catch(e) { return; }
     if (d.type === "battery") setBattery(d.pct, d.mv);
-    else if (d.type === "wifi") { $("wifi").textContent = "connected";
-      $("ip").textContent = d.ip;
-      refresh(); }
+    else if (d.type === "wifi") {
+      setNetworkStatus({ wifi_connected: d.connected, ip: d.ip,
+        wifi_status: d.connected ? "connected" : "disconnected" });
+      refresh();
+    }
     else if (d.type === "module") refresh();
     else if (d.type === "ota") {
       if (d.done) $("otamsg").textContent = "Update complete — rebooting.";

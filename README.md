@@ -87,6 +87,20 @@ idf.py build
 
 ## First boot and WiFi
 
+GallusOS uses **two different networks** depending on mode. The addresses
+are not interchangeable.
+
+| Mode | When | How you connect | Web UI address |
+|---|---|---|---|
+| **Provisioning** | First boot, missing WiFi credentials, or repeated STA failure | Join open SoftAP **`GallusOS-XXXX`** | **`http://192.168.42.1`** (or any URL — DNS is redirected) |
+| **Normal (STA)** | After WiFi is saved and the device is on your LAN | Stay on your home WiFi — do **not** use the GallusOS AP | **`http://gallus-XXXX.local`** or the DHCP IP shown on the OLED (e.g. `http://192.168.1.103`) |
+
+`192.168.42.1` only works while you are connected to the **GallusOS-XXXX**
+SoftAP. Once the device joins your router, use **mDNS** or the **LAN IP**
+from the OLED — not `192.168.42.1`.
+
+### Provisioning steps
+
 On first boot (or when STA credentials are missing), GallusOS starts a
 SoftAP provisioning portal:
 
@@ -95,10 +109,10 @@ SoftAP provisioning portal:
    SoftAP is **open** (no WiFi password).
 2. Your OS should detect the captive portal and open the setup page
    automatically. If it does not, browse to **`http://192.168.42.1`**
-   (or any URL — DNS is redirected to the portal).
+   while still joined to **GallusOS-XXXX**.
 3. Enter your home WiFi SSID and password, then save.
-4. The device reboots into STA mode, obtains a DHCP address, and announces
-   itself via mDNS as **`http://gallus-XXXX.local`**.
+4. The device reboots into STA mode, obtains a DHCP address on your LAN,
+   and announces itself via mDNS as **`http://gallus-XXXX.local`**.
 
 Credentials are stored in LittleFS config and persist across reboots.
 
@@ -106,11 +120,16 @@ Credentials are stored in LittleFS config and persist across reboots.
 
 ## Web dashboard
 
-Once connected to your network, open the device hostname in a browser:
+Once connected to **your home network** (STA mode), open the dashboard
+using either hostname or IP:
 
 ```
 http://gallus-XXXX.local/
+http://192.168.1.xxx/          # DHCP address — also shown on the OLED
 ```
+
+Do not use `192.168.42.1` here — that address belongs to the
+provisioning SoftAP only.
 
 The dashboard shows system status, live telemetry (WebSocket), module
 list, OTA upload, and developer tabs for **Diagnostics**, **Filesystem**
@@ -297,7 +316,7 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | 4 | Module codegen, example modules | Done |
 | 5 | Display, battery, OTA, web dashboard | Done |
 | 6 | SDK CLI, diagnostics UI, REST explorer, filesystem browser, host tests, CI | Done |
-| 7 | Config REST API, Settings tab, DiagnosticsService, live log stream, charge mode | In progress |
+| 7 | Config REST API, Settings tab, DiagnosticsService, live log stream, charge mode | Done |
 
 | Version | Value |
 |---|---|
@@ -305,7 +324,7 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | REST API | v1 |
 | Module API | not yet frozen |
 
-Phase 7 work is on branch **`stage-7`**.
+Phase 7 work is on branch **`stage-7`** (ready to merge to `master`).
 
 ### Phase 6 additions
 
@@ -315,13 +334,21 @@ Phase 7 work is on branch **`stage-7`**.
 - **Modules:** `system_info`, `i2c_scanner`
 - **CI:** `.github/workflows/ci.yml` + host manifest tests in `tests/host/`
 
-### Phase 7 additions (in progress)
+### Phase 7 additions
 
 - **`DiagnosticsService`** — heap, scheduler, event-bus and task snapshots for REST
 - **REST:** `GET/PUT /api/v1/config` — read/write config namespaces (secrets redacted)
 - **Dashboard:** Settings tab (API token, reboot, factory reset, charge mode), live serial log stream on Diagnostics
 - **Charge mode:** Boot long-press (2 s) or API — WiFi/modules off, OLED charge screen; short Boot press to exit
 - **SDK CLI:** `create-service`, `create-driver` scaffolds
+- **Fixes:** Network card WiFi/IP on page load; provisioning portal takes precedence over dashboard on `GET /`
+
+### Phase 8 (planned)
+
+- **Host simulation** — run modules/services on the desktop for faster iteration
+- **Module API freeze** — document and stabilise the SDK surface for third-party modules
+- **Dashboard config editor** — edit namespaces beyond the Settings tab shortcuts
+- **SDK CLI:** `generate-docs`, `lint`, richer `validate` checks
 
 ---
 

@@ -5,6 +5,9 @@
 # --- Authoritative local spec (kept out of version control) ---
 Development-Prompt.txt
 
+# --- Local session handover / project notes (not shared via git) ---
+PROJECT-HANDOVER.md
+
 # --- ESP-IDF build tree (removed by `idf.py clean` / `idf.py fullclean`) ---
 build/
 

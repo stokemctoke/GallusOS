@@ -292,16 +292,18 @@ python3 tools/gallus.py host-sim
 ### Host simulation
 
 GallusOS can boot its **kernel** (event bus + scheduler) on Linux using
-pthread shims in `host/shim/`. This is not a chip emulator — it runs the
-same kernel sources as firmware to validate event delivery and scheduled
-jobs without flashing.
+pthread shims in `host/shim/`. Mock **storage**, **config**, **GPIO**,
+**REST**, and **I2C** services let the real `ModuleManager` load
+`hello_world` without flashing.
 
 ```bash
 python3 tools/gallus.py host-sim
 ```
 
-Next steps for host sim: mock services (`ConfigService`, `GpioService`),
-then run compile-time modules through `ModuleManager` on the desktop.
+Look for `Hello from GallusOS host!` and `host sim: ready=1 module=1`.
+
+Next steps for host sim: more modules, richer service mocks, cleaner log
+formatting on the desktop.
 
 To regenerate splash bitmaps (optional — pre-generated header is committed):
 
@@ -356,6 +358,8 @@ Phase 9 work is on branch **`stage-9`**.
 ### Phase 9 additions (in progress)
 
 - **`host/`** — desktop kernel harness with FreeRTOS/esp_timer/esp_log shims
+- **Mock services** — in-memory storage, config, GPIO, REST, and I2C on Linux
+- **`hello_world` on host** — `ModuleManager` runs the example module via `host-sim`
 - **`tools/gallus.py host-sim`** — build and run the harness from the SDK CLI
 - **CI** — host sim runs in `tests/host/run_tests.py`
 
@@ -384,7 +388,7 @@ Phase 9 work is on branch **`stage-9`**.
 
 ### Phase 9 / 10 (remaining)
 
-- **Host simulation** — mock services, then `ModuleManager` + modules on desktop
+- **Host simulation** — more modules and service mocks on desktop
 - **SDK CLI:** `generate-docs`, `lint`, richer `validate` checks
 - **GitHub release** — tag v0.1.0 with flash instructions and changelog
 - **Module API freeze** — after host sim and CLI polish (last)

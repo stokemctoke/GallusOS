@@ -274,4 +274,35 @@ Status ConfigService::erase(const char* ns, const char* key) {
     return status;
 }
 
+void* ConfigService::exportNamespace(const char* ns, bool redact) const {
+    if (!initialized_ || ns == nullptr) {
+        return cJSON_CreateObject();
+    }
+    Lock lock(mutex_);
+    cJSON* doc = static_cast<cJSON*>(loadNamespace(ns));
+    cJSON* copy = cJSON_Duplicate(doc, 1);
+    cJSON_Delete(doc);
+    if (copy == nullptr) {
+        return cJSON_CreateObject();
+    }
+    if (!redact) {
+        return copy;
+    }
+    if (strcmp(ns, "system") == 0) {
+        cJSON* tok = cJSON_GetObjectItemCaseSensitive(copy, "api_token");
+        if (cJSON_IsString(tok) && tok->valuestring != nullptr &&
+            tok->valuestring[0] != '\0') {
+            cJSON_SetValuestring(tok, "(set)");
+        }
+    }
+    if (strcmp(ns, "wifi") == 0) {
+        cJSON* pw = cJSON_GetObjectItemCaseSensitive(copy, "password");
+        if (cJSON_IsString(pw) && pw->valuestring != nullptr &&
+            pw->valuestring[0] != '\0') {
+            cJSON_SetValuestring(pw, "(set)");
+        }
+    }
+    return copy;
+}
+
 }  // namespace gallus::services

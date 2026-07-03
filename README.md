@@ -144,6 +144,8 @@ logged at startup.
 | `GET` | `/api/v1/files/list?path=/fs` | List LittleFS directory entries |
 | `GET` | `/api/v1/files/read?path=/fs/...` | Read a text file (up to 8 KB) |
 | `GET` | `/api/v1/i2c/scan` | Scan the I2C bus for devices |
+| `GET` | `/api/v1/config?namespace=system` | Read a config namespace (secrets redacted) |
+| `PUT` | `/api/v1/config` | Update config values (`{"namespace","values"}`) |
 | `GET` | `/api/v1/endpoints` | Catalogue of built-in API routes |
 | `POST` | `/api/v1/ota/upload` | Raw firmware binary (same file as `build/gallus_os.bin`) |
 
@@ -240,7 +242,7 @@ Disable a module at runtime via config: namespace `modules`, key `<name>` =
 
 | Script | Purpose |
 |---|---|
-| `tools/gallus.py` | SDK CLI: `create-module`, `validate-module`, `validate-all`, `build`, `flash`, `monitor` |
+| `tools/gallus.py` | SDK CLI: `create-module`, `create-service`, `create-driver`, `validate-module`, `validate-all`, `build`, `flash`, `monitor` |
 | `tools/gallus_manifest_gen.py` | Validates `manifest.json`, emits C++ registration |
 | `tools/gallus_module.cmake` | CMake macro called from module `CMakeLists.txt` |
 | `tools/gallus_image_gen.py` | Converts 128×64 PNG splash art to SSD1306 C arrays |
@@ -288,7 +290,8 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | 3 | mDNS, SNTP, module manager, API routes | Done |
 | 4 | Module codegen, example modules | Done |
 | 5 | Display, battery, OTA, web dashboard | Done |
-| 6 | SDK CLI, diagnostics UI, REST explorer, filesystem browser, host tests, CI | In progress |
+| 6 | SDK CLI, diagnostics UI, REST explorer, filesystem browser, host tests, CI | Done |
+| 7 | Config REST API, Settings tab, DiagnosticsService, live log stream, SDK scaffolds | In progress |
 
 | Version | Value |
 |---|---|
@@ -296,7 +299,7 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | REST API | v1 |
 | Module API | not yet frozen |
 
-Phase 6 work is on branch **`stage-6`**.
+Phase 7 work is on branch **`stage-7`**.
 
 ### Phase 6 additions
 
@@ -305,6 +308,13 @@ Phase 6 work is on branch **`stage-6`**.
 - **Dashboard tabs:** Diagnostics, Filesystem browser, REST explorer
 - **Modules:** `system_info`, `i2c_scanner`
 - **CI:** `.github/workflows/ci.yml` + host manifest tests in `tests/host/`
+
+### Phase 7 additions (in progress)
+
+- **`DiagnosticsService`** — heap, scheduler, event-bus and task snapshots for REST
+- **REST:** `GET/PUT /api/v1/config` — read/write config namespaces (secrets redacted)
+- **Dashboard:** Settings tab (API token, static IP), live serial log stream on Diagnostics
+- **SDK CLI:** `create-service`, `create-driver` scaffolds
 
 ---
 

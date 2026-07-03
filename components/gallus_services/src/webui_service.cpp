@@ -9,6 +9,8 @@
 #include "gallus/services/ota_service.hpp"
 #include "gallus/services/wifi_service.hpp"
 
+#include "esp_log.h"
+
 /// Embedded gzipped dashboard (see gallus_services CMakeLists.txt).
 extern const uint8_t kDashboardStart[] asm("_binary_index_html_gz_start");
 extern const uint8_t kDashboardEnd[] asm("_binary_index_html_gz_end");
@@ -19,13 +21,14 @@ extern const uint8_t kFaviconIcoEnd[] asm("_binary_favicon_ico_end");
 
 namespace gallus::services {
 
+WebUiService* WebUiService::log_instance_ = nullptr;
+vprintf_like_t WebUiService::prev_log_ = nullptr;
+
 namespace {
 
 constexpr const char* kTag = "WebUI";
 
-/// Mirror of sdk::ModuleManager::ModuleEventPayload. The SDK layer
-/// sits above services, so including its header here would invert the
-/// dependency; the layout is pinned instead.
+/// Mirror of sdk::ModuleManager::ModuleEventPayload.
 struct ModulePayload {
     char name[24];
 };
@@ -48,11 +51,26 @@ void WebUiService::wsSendWorker(void* arg) {
     frame.payload = reinterpret_cast<uint8_t*>(work->data);
     frame.len = work->len;
     if (httpd_ws_send_frame_async(work->server, work->fd, &frame) != ESP_OK) {
-        // Client is gone (closed without a close frame) — drop it so
-        // the slot can be reused.
         work->service->removeClient(work->fd);
     }
     free(work);
+}
+
+int WebUiService::logVprintf(const char* fmt, va_list args) {
+    if (log_instance_ != nullptr) {
+        char line[220] = {};
+        va_list copy;
+        va_copy(copy, args);
+        vsnprintf(line, sizeof(line), fmt, copy);
+        va_end(copy);
+        if (line[0] != '\0') {
+            log_instance_->pushLogLine(line);
+        }
+    }
+    if (prev_log_ != nullptr) {
+        return prev_log_(fmt, args);
+    }
+    return vprintf(fmt, args);
 }
 
 Status WebUiService::init() {
@@ -79,6 +97,9 @@ Status WebUiService::init() {
         events_.subscribe(EventId::OTAProgress, &onEvent, this).status());
     GALLUS_RETURN_IF_ERROR(
         events_.subscribe(EventId::OTAFinished, &onEvent, this).status());
+
+    log_instance_ = this;
+    prev_log_ = esp_log_set_vprintf(&WebUiService::logVprintf);
 
     Log::info(kTag, "dashboard ready at / (ws at /ws)");
     return Status::success();
@@ -112,18 +133,12 @@ esp_err_t WebUiService::wsHandler(httpd_req_t* req) {
     auto* self = static_cast<WebUiService*>(req->user_ctx);
 
     if (req->method == HTTP_GET) {
-        // Handshake completed by the server; register this client.
         self->addClient(httpd_req_to_sockfd(req));
         Log::info(kTag, "ws client connected (fd %d)",
                   httpd_req_to_sockfd(req));
         return ESP_OK;
     }
 
-    // Drain any incoming frame (we don't act on client messages yet,
-    // but must read to keep the socket healthy / handle close). On any
-    // receive error the client is gone or misbehaving — drop it and
-    // return an error so httpd closes the session; returning ESP_OK
-    // here would make httpd re-invoke this handler in a tight loop.
     const int fd = httpd_req_to_sockfd(req);
     httpd_ws_frame_t frame = {};
     if (httpd_ws_recv_frame(req, &frame, 0) != ESP_OK) {
@@ -136,7 +151,6 @@ esp_err_t WebUiService::wsHandler(httpd_req_t* req) {
         return ESP_FAIL;
     }
     if (frame.len > 0) {
-        // Discard the payload; oversized frames get the boot too.
         uint8_t sink[128];
         if (frame.len > sizeof(sink)) {
             self->removeClient(fd);
@@ -246,6 +260,29 @@ void WebUiService::broadcast(const char* json) {
         }
     }
     xSemaphoreGive(mutex_);
+}
+
+void WebUiService::pushLogLine(const char* line) {
+    char escaped[240] = {};
+    size_t j = 0;
+    for (const char* p = line; *p != '\0' && j + 2 < sizeof(escaped); ++p) {
+        if (*p == '"' || *p == '\\') {
+            if (j + 1 >= sizeof(escaped)) {
+                break;
+            }
+            escaped[j++] = '\\';
+        }
+        if (*p == '\n' || *p == '\r') {
+            continue;
+        }
+        escaped[j++] = *p;
+    }
+    escaped[j] = '\0';
+
+    char json[280] = {};
+    snprintf(json, sizeof(json), "{\"type\":\"log\",\"line\":\"%s\"}",
+             escaped);
+    broadcast(json);
 }
 
 }  // namespace gallus::services

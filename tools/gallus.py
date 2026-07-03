@@ -75,6 +75,84 @@ MODULE_README_TEMPLATE = """\
 Namespace `{name}` in LittleFS config.
 """
 
+SERVICE_HPP_TEMPLATE = '''\
+#pragma once
+
+#include "gallus/error.hpp"
+
+namespace gallus::services {{
+
+/// @brief {description}
+class {class_name} {{
+public:
+    {class_name}() = default;
+    {class_name}(const {class_name}&) = delete;
+    {class_name}& operator=(const {class_name}&) = delete;
+
+    Status init();
+}};
+
+}}  // namespace gallus::services
+'''
+
+SERVICE_CPP_TEMPLATE = '''\
+#include "gallus/services/{name}_service.hpp"
+
+#include "gallus/log.hpp"
+
+namespace gallus::services {{
+
+namespace {{
+constexpr const char* kTag = "{tag}";
+}}
+
+Status {class_name}::init() {{
+    gallus::Log::info(kTag, "ready");
+    return gallus::Status::success();
+}}
+
+}}  // namespace gallus::services
+'''
+
+SERVICE_CMAKE_SNIPPET = '''\
+        "src/{name}_service.cpp"
+'''
+
+DRIVER_HPP_TEMPLATE = '''\
+#pragma once
+
+#include "gallus/error.hpp"
+
+namespace gallus::drivers {{
+
+/// @brief {description}
+class {class_name} {{
+public:
+    Status init();
+}};
+
+}}  // namespace gallus::drivers
+'''
+
+DRIVER_CPP_TEMPLATE = '''\
+#include "gallus/drivers/{name}.hpp"
+
+#include "gallus/log.hpp"
+
+namespace gallus::drivers {{
+
+namespace {{
+constexpr const char* kTag = "{tag}";
+}}
+
+Status {class_name}::init() {{
+    gallus::Log::info(kTag, "ready");
+    return gallus::Status::success();
+}}
+
+}}  // namespace gallus::drivers
+'''
+
 
 def run_idf(args: list[str]) -> int:
     env = os.environ.copy()
@@ -118,6 +196,66 @@ def cmd_create_module(args: argparse.Namespace) -> int:
 
     print(f"created module at modules/{name}/")
     print("next: idf.py build")
+    return 0
+
+
+def cmd_create_service(args: argparse.Namespace) -> int:
+    name = args.name
+    if not name.islower() or not name.replace("_", "").isalnum():
+        print("error: service name must be lower_snake_case", file=sys.stderr)
+        return 1
+
+    class_name = "".join(part.capitalize() for part in name.split("_")) + "Service"
+    description = args.description or f"The {name} service."
+    tag = name.replace("_", " ").title()
+
+    hpp = ROOT / "components/gallus_services/include/gallus/services" / f"{name}_service.hpp"
+    cpp = ROOT / "components/gallus_services/src" / f"{name}_service.cpp"
+    if hpp.exists() or cpp.exists():
+        print("error: service files already exist", file=sys.stderr)
+        return 1
+
+    hpp.write_text(SERVICE_HPP_TEMPLATE.format(
+        name=name, class_name=class_name, description=description),
+        encoding="utf-8")
+    cpp.write_text(SERVICE_CPP_TEMPLATE.format(
+        name=name, class_name=class_name, tag=tag),
+        encoding="utf-8")
+
+    print(f"created service stubs:")
+    print(f"  {hpp.relative_to(ROOT)}")
+    print(f"  {cpp.relative_to(ROOT)}")
+    print(f"next: add {name}_service.cpp to components/gallus_services/CMakeLists.txt")
+    return 0
+
+
+def cmd_create_driver(args: argparse.Namespace) -> int:
+    name = args.name
+    if not name.islower() or not name.replace("_", "").isalnum():
+        print("error: driver name must be lower_snake_case", file=sys.stderr)
+        return 1
+
+    class_name = "".join(part.capitalize() for part in name.split("_"))
+    description = args.description or f"The {name} driver."
+    tag = name.replace("_", " ").title()
+
+    hpp = ROOT / "components/gallus_drivers/include/gallus/drivers" / f"{name}.hpp"
+    cpp = ROOT / "components/gallus_drivers/src" / f"{name}.cpp"
+    if hpp.exists() or cpp.exists():
+        print("error: driver files already exist", file=sys.stderr)
+        return 1
+
+    hpp.write_text(DRIVER_HPP_TEMPLATE.format(
+        name=name, class_name=class_name, description=description),
+        encoding="utf-8")
+    cpp.write_text(DRIVER_CPP_TEMPLATE.format(
+        name=name, class_name=class_name, tag=tag),
+        encoding="utf-8")
+
+    print(f"created driver stubs:")
+    print(f"  {hpp.relative_to(ROOT)}")
+    print(f"  {cpp.relative_to(ROOT)}")
+    print("next: add the .cpp to components/gallus_drivers/CMakeLists.txt")
     return 0
 
 
@@ -177,6 +315,18 @@ def main() -> int:
     create.add_argument("--description", help="short module description")
     create.add_argument("--category", help="manifest category")
     create.set_defaults(func=cmd_create_module)
+
+    create_service = sub.add_parser("create-service",
+                                    help="scaffold a new core service")
+    create_service.add_argument("name", help="lower_snake_case service name")
+    create_service.add_argument("--description", help="short service description")
+    create_service.set_defaults(func=cmd_create_service)
+
+    create_driver = sub.add_parser("create-driver",
+                                   help="scaffold a new hardware driver")
+    create_driver.add_argument("name", help="lower_snake_case driver name")
+    create_driver.add_argument("--description", help="short driver description")
+    create_driver.set_defaults(func=cmd_create_driver)
 
     validate = sub.add_parser("validate-module",
                               help="validate a module manifest")

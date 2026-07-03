@@ -119,4 +119,8 @@ bool RestService::authorize(httpd_req_t* req) const {
     return false;
 }
 
+void RestService::reloadToken() {
+    (void)config_.getString("system", "api_token", token_, sizeof(token_), "");
+}
+
 }  // namespace gallus::services

@@ -38,6 +38,7 @@ idf_component_register(
         "src/ota_service.cpp"
         "src/webui_service.cpp"
         "src/i2c_service.cpp"
+        "src/diagnostics_service.cpp"
     INCLUDE_DIRS include
     REQUIRES gallus_kernel gallus_drivers gallus_hal esp_http_server esp_netif esp_event
     PRIV_REQUIRES json esp_wifi nvs_flash lwip app_update

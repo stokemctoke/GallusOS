@@ -25,7 +25,7 @@ class RestService {
 public:
     using Handler = esp_err_t (*)(httpd_req_t* req);
 
-    static constexpr size_t kMaxRoutes = 24;
+    static constexpr size_t kMaxRoutes = 28;
 
     explicit RestService(ConfigService& config) : config_(config) {}
     RestService(const RestService&) = delete;
@@ -50,6 +50,9 @@ public:
     /// Enforce token auth. Returns true when the request may proceed;
     /// otherwise a 401 response has already been sent.
     bool authorize(httpd_req_t* req) const;
+
+    /// Reload system/api_token from config (after a settings change).
+    void reloadToken();
 
     [[nodiscard]] bool running() const { return server_ != nullptr; }
 

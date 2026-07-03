@@ -90,6 +90,7 @@
   <button data-tab="diag">Diagnostics</button>
   <button data-tab="files">Filesystem</button>
   <button data-tab="api">REST Explorer</button>
+  <button data-tab="settings">Settings</button>
 </nav>
 
 <section id="panel-dash" class="panel active">
@@ -136,6 +137,8 @@
     <h2>Diagnostics</h2>
     <div id="diagRows"></div>
     <pre id="taskList" class="muted" style="margin-top:12px;white-space:pre-wrap"></pre>
+    <div class="muted" style="margin-top:12px">Live log</div>
+    <pre id="logStream" style="margin-top:8px;max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
     <button id="diagRefresh" style="margin-top:12px">Refresh</button>
   </div>
 </section>
@@ -149,6 +152,31 @@
       <div class="muted">File preview</div>
       <pre id="fsPreview" style="margin-top:8px;white-space:pre-wrap"></pre>
     </div>
+  </div>
+</section>
+
+<section id="panel-settings" class="panel">
+  <div class="card full">
+    <h2>Security</h2>
+    <div class="row"><span class="k">API token</span></div>
+    <input type="password" id="cfgToken" placeholder="Leave blank for open API">
+    <button id="cfgTokenSave" style="margin-top:10px">Save token</button>
+    <div class="muted" id="cfgTokenMsg" style="margin-top:8px"></div>
+  </div>
+  <div class="card full">
+    <h2>Network</h2>
+    <div class="row">
+      <span class="k">Static IP (Gallus 192.168.42.x)</span>
+      <span class="v"><input type="checkbox" id="cfgStatic"></span>
+    </div>
+    <div class="row"><span class="k">IP</span></div>
+    <input type="text" id="cfgIp" value="192.168.42.42">
+    <div class="row" style="margin-top:8px"><span class="k">Gateway</span></div>
+    <input type="text" id="cfgGw" value="192.168.42.1">
+    <div class="row" style="margin-top:8px"><span class="k">Netmask</span></div>
+    <input type="text" id="cfgMask" value="255.255.255.0">
+    <button id="cfgNetSave" style="margin-top:10px">Save network</button>
+    <div class="muted" id="cfgNetMsg" style="margin-top:8px">Reboot required after network changes.</div>
   </div>
 </section>
 
@@ -226,7 +254,15 @@ function connectWs() {
       else { $("otabar").style.width = d.percent + "%";
         $("otamsg").textContent = "Flashing… " + d.percent + "%"; }
     }
+    else if (d.type === "log") appendLog(d.line);
   };
+}
+
+const logLines = [];
+function appendLog(line) {
+  logLines.push(line);
+  if (logLines.length > 80) logLines.shift();
+  $("logStream").textContent = logLines.join("\n");
 }
 
 $("fwbtn").onclick = () => {
@@ -264,6 +300,7 @@ document.querySelectorAll("nav button").forEach(btn => {
     if (btn.dataset.tab === "diag") loadDiagnostics();
     if (btn.dataset.tab === "files") loadFiles("/fs");
     if (btn.dataset.tab === "api") loadEndpoints();
+    if (btn.dataset.tab === "settings") loadSettings();
   };
 });
 
@@ -346,6 +383,55 @@ $("apiGo").onclick = async () => {
   } catch (e) {
     $("apiOut").textContent = "Request failed.";
   }
+};
+
+async function loadSettings() {
+  try {
+    const sys = await fetch("/api/v1/config?namespace=system").then(r => r.json());
+    $("cfgToken").value = sys.values.api_token === "(set)" ? "" : (sys.values.api_token || "");
+    $("cfgToken").placeholder = sys.values.api_token === "(set)" ? "(token is set)" : "Leave blank for open API";
+  } catch (e) {}
+  try {
+    const net = await fetch("/api/v1/config?namespace=network").then(r => r.json());
+    const v = net.values || {};
+    $("cfgStatic").checked = !!v.use_static_ip;
+    if (v.ip) $("cfgIp").value = v.ip;
+    if (v.gateway) $("cfgGw").value = v.gateway;
+    if (v.netmask) $("cfgMask").value = v.netmask;
+  } catch (e) {}
+}
+
+async function saveConfig(ns, values, msgEl) {
+  msgEl.textContent = "Saving…";
+  try {
+    const r = await fetch("/api/v1/config", {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({namespace: ns, values})
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error("failed");
+    msgEl.textContent = d.reboot_recommended ? "Saved — reboot to apply." : "Saved.";
+  } catch (e) {
+    msgEl.textContent = "Save failed.";
+  }
+}
+
+$("cfgTokenSave").onclick = () => {
+  const tok = $("cfgToken").value.trim();
+  const values = {};
+  if (tok) values.api_token = tok;
+  else values.api_token = "";
+  saveConfig("system", values, $("cfgTokenMsg"));
+};
+
+$("cfgNetSave").onclick = () => {
+  saveConfig("network", {
+    use_static_ip: $("cfgStatic").checked,
+    ip: $("cfgIp").value.trim(),
+    gateway: $("cfgGw").value.trim(),
+    netmask: $("cfgMask").value.trim()
+  }, $("cfgNetMsg"));
 };
 </script>
 </body>

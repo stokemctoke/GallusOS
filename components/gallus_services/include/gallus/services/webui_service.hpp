@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "esp_http_server.h"
+#include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -52,6 +53,12 @@ private:
     void addClient(int fd);
     void removeClient(int fd);
     void broadcast(const char* json);
+    void pushLogLine(const char* line);
+
+    static int logVprintf(const char* fmt, va_list args);
+
+    static WebUiService* log_instance_;
+    static vprintf_like_t prev_log_;
 
     EventBus& events_;
     RestService& rest_;

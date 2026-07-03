@@ -150,46 +150,118 @@ esp_err_t diagnosticsHandler(httpd_req_t* req) {
         return ESP_OK;
     }
 
-    cJSON* doc = cJSON_CreateObject();
-
-    cJSON* heap = cJSON_AddObjectToObject(doc, "heap");
-    cJSON_AddNumberToObject(heap, "free", esp_get_free_heap_size());
-    cJSON_AddNumberToObject(heap, "min_free", esp_get_minimum_free_heap_size());
-
-    if (ctx->kernel != nullptr) {
-        cJSON* events = cJSON_AddObjectToObject(doc, "events");
-        cJSON_AddNumberToObject(events, "delivered",
-                                ctx->kernel->events().deliveredCount());
-        cJSON_AddNumberToObject(events, "dropped",
-                                ctx->kernel->events().droppedCount());
-
-        cJSON* scheduler = cJSON_AddObjectToObject(doc, "scheduler");
-        cJSON_AddNumberToObject(scheduler, "active_jobs",
-                                ctx->kernel->scheduler().activeJobs());
+    cJSON* doc = ctx->diagnostics->snapshotJson();
+    if (doc == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "out of memory");
     }
-
-    if (ctx->storage != nullptr && ctx->storage->mounted()) {
-        cJSON* fs = cJSON_AddObjectToObject(doc, "filesystem");
-        const auto total = ctx->storage->totalBytes();
-        const auto used = ctx->storage->usedBytes();
-        if (total.ok()) {
-            cJSON_AddNumberToObject(fs, "total_bytes", total.value());
-        }
-        if (used.ok()) {
-            cJSON_AddNumberToObject(fs, "used_bytes", used.value());
-        }
-    }
-
-    cJSON* tasks = cJSON_AddObjectToObject(doc, "tasks");
-    cJSON_AddNumberToObject(tasks, "count", uxTaskGetNumberOfTasks());
-#if CONFIG_FREERTOS_USE_TRACE_FACILITY && \
-    CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS
-    char task_buf[1024] = {};
-    vTaskList(task_buf);
-    cJSON_AddStringToObject(tasks, "list", task_buf);
-#endif
-
     return sendJson(req, doc);
+}
+
+bool queryNamespace(httpd_req_t* req, char* ns, size_t cap) {
+    char query[64] = {};
+    if (httpd_req_get_url_query_len(req) + 1 > sizeof(query)) {
+        return false;
+    }
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+        return false;
+    }
+    return httpd_query_key_value(query, "namespace", ns, cap) == ESP_OK &&
+           ns[0] != '\0';
+}
+
+esp_err_t configGetHandler(httpd_req_t* req) {
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (!ctx->rest->authorize(req)) {
+        return ESP_OK;
+    }
+
+    char ns[32] = {};
+    if (!queryNamespace(req, ns, sizeof(ns))) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                   "missing namespace");
+    }
+
+    cJSON* doc = cJSON_CreateObject();
+    cJSON_AddStringToObject(doc, "namespace", ns);
+    cJSON* values = static_cast<cJSON*>(ctx->config->exportNamespace(ns, true));
+    cJSON_AddItemToObject(doc, "values", values);
+    return sendJson(req, doc);
+}
+
+Status applyConfigValue(services::ConfigService& config, const char* ns,
+                        const char* key, const cJSON* value) {
+    if (cJSON_IsBool(value)) {
+        return config.setBool(ns, key, cJSON_IsTrue(value));
+    }
+    if (cJSON_IsNumber(value)) {
+        return config.setInt(ns, key, static_cast<int32_t>(value->valuedouble));
+    }
+    if (cJSON_IsString(value) && value->valuestring != nullptr) {
+        if (strcmp(value->valuestring, "(set)") == 0) {
+            return Status::success();
+        }
+        return config.setString(ns, key, value->valuestring);
+    }
+    return Error::InvalidArg;
+}
+
+esp_err_t configPutHandler(httpd_req_t* req) {
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (!ctx->rest->authorize(req)) {
+        return ESP_OK;
+    }
+
+    char body[512] = {};
+    const int received = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (received <= 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+    body[received] = '\0';
+
+    cJSON* doc = cJSON_Parse(body);
+    if (doc == nullptr || !cJSON_IsObject(doc)) {
+        cJSON_Delete(doc);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+
+    const cJSON* ns_item = cJSON_GetObjectItemCaseSensitive(doc, "namespace");
+    const cJSON* values = cJSON_GetObjectItemCaseSensitive(doc, "values");
+    if (!cJSON_IsString(ns_item) || ns_item->valuestring == nullptr ||
+        !cJSON_IsObject(values)) {
+        cJSON_Delete(doc);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                   "need namespace and values");
+    }
+
+    const char* ns = ns_item->valuestring;
+    Status status = Status::success();
+    cJSON* child = nullptr;
+    cJSON_ArrayForEach(child, values) {
+        if (child->string == nullptr) {
+            continue;
+        }
+        status = applyConfigValue(*ctx->config, ns, child->string, child);
+        if (!status.ok()) {
+            break;
+        }
+    }
+    cJSON_Delete(doc);
+
+    if (!status.ok()) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "update failed");
+    }
+    if (strcmp(ns, "system") == 0) {
+        ctx->rest->reloadToken();
+    }
+
+    cJSON* out = cJSON_CreateObject();
+    cJSON_AddBoolToObject(out, "ok", true);
+    cJSON_AddStringToObject(out, "namespace", ns);
+    cJSON_AddBoolToObject(out, "reboot_recommended",
+                          strcmp(ns, "network") == 0 ||
+                              strcmp(ns, "wifi") == 0);
+    return sendJson(req, out);
 }
 
 esp_err_t filesListHandler(httpd_req_t* req) {
@@ -299,6 +371,8 @@ esp_err_t endpointsHandler(httpd_req_t* req) {
         {"GET", "/api/v1/files/list?path=/fs", "List directory entries"},
         {"GET", "/api/v1/files/read?path=/fs/...", "Read a text file"},
         {"GET", "/api/v1/i2c/scan", "Scan the I2C bus"},
+        {"GET", "/api/v1/config?namespace=system", "Read a config namespace"},
+        {"PUT", "/api/v1/config", "Update config namespace values"},
         {"GET", "/api/v1/endpoints", "This list"},
         {"POST", "/api/v1/ota/upload", "Upload firmware binary"},
     };
@@ -352,6 +426,16 @@ Status registerApiRoutes(ApiContext& ctx) {
     }
     status = ctx.rest->registerRoute(HTTP_GET, "/api/v1/i2c/scan",
                                      &i2cScanHandler, &ctx);
+    if (!status.ok()) {
+        return status;
+    }
+    status = ctx.rest->registerRoute(HTTP_GET, "/api/v1/config",
+                                     &configGetHandler, &ctx);
+    if (!status.ok()) {
+        return status;
+    }
+    status = ctx.rest->registerRoute(HTTP_PUT, "/api/v1/config",
+                                     &configPutHandler, &ctx);
     if (!status.ok()) {
         return status;
     }

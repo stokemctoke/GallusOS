@@ -14,6 +14,7 @@
 #include "gallus/sdk/module_manager.hpp"
 #include "gallus/services/battery_service.hpp"
 #include "gallus/services/config_service.hpp"
+#include "gallus/services/diagnostics_service.hpp"
 #include "gallus/services/display_service.hpp"
 #include "gallus/services/gpio_service.hpp"
 #include "gallus/services/i2c_service.hpp"
@@ -77,6 +78,7 @@ extern "C" void app_main(void) {
         gallus::hal::board::kPinBatteryMeasureEnable);
     static gallus::services::OtaService ota(kernel.events(), rest);
     static gallus::services::WebUiService webui(kernel.events(), rest);
+    static gallus::services::DiagnosticsService diagnostics(kernel, storage);
 
     check("storage init", storage.init());
     check("config init", config.init());
@@ -111,9 +113,9 @@ extern "C" void app_main(void) {
     static gallus::sdk::ModuleManager modules(module_ctx);
     check("modules init", modules.initAll());
 
-    static gallus::app::ApiContext api_ctx = {&rest,    &config, &gpio,
-                                              &storage, &i2c,    &modules,
-                                              &battery, &kernel};
+    static gallus::app::ApiContext api_ctx = {&rest,    &config, &diagnostics,
+                                              &gpio,    &storage, &i2c,
+                                              &modules, &battery, &kernel};
     check("api routes", gallus::app::registerApiRoutes(api_ctx));
 
     check("ota init", ota.init());

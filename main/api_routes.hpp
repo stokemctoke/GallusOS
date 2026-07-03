@@ -4,6 +4,7 @@
 #include "gallus/sdk/module_manager.hpp"
 #include "gallus/services/battery_service.hpp"
 #include "gallus/services/config_service.hpp"
+#include "gallus/services/diagnostics_service.hpp"
 #include "gallus/services/gpio_service.hpp"
 #include "gallus/services/i2c_service.hpp"
 #include "gallus/services/rest_service.hpp"
@@ -17,6 +18,7 @@ namespace gallus::app {
 struct ApiContext {
     services::RestService* rest;
     services::ConfigService* config;
+    services::DiagnosticsService* diagnostics;
     services::GpioService* gpio;
     services::StorageService* storage;
     services::I2cService* i2c;

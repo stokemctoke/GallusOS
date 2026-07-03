@@ -10,9 +10,6 @@ channel, and a browser dashboard with over-the-air firmware updates.
 
 Primary target hardware: **Seeed Studio XIAO ESP32-C5** (8 MB flash).
 
-The full architecture specification lives in
-[Development-Prompt.txt](Development-Prompt.txt).
-
 ---
 
 ## Features
@@ -112,15 +109,9 @@ Once connected to your network, open the device hostname in a browser:
 http://gallus-XXXX.local/
 ```
 
-The dashboard shows:
-
-- Firmware version, ESP-IDF version, uptime, heap, boot count
-- Live battery voltage and percentage (WebSocket push)
-- WiFi / IP status
-- Loaded modules and their state
-- **Firmware update** — select a `.bin` file and upload; progress is shown
-  on screen and over WebSocket; the device reboots into the new image on
-  success
+The dashboard shows system status, live telemetry (WebSocket), module
+list, OTA upload, and developer tabs for **Diagnostics**, **Filesystem**
+browsing, and a **REST explorer**.
 
 Live events arrive on **`ws://gallus-XXXX.local/ws`** (battery, WiFi,
 module lifecycle, OTA progress).
@@ -149,6 +140,11 @@ logged at startup.
 | `GET` | `/api/v1/gpio` | Pin reservation snapshot |
 | `GET` | `/api/v1/modules` | Registered modules, versions, categories, state |
 | `GET` | `/api/v1/battery` | Millivolts and percentage |
+| `GET` | `/api/v1/diagnostics` | Heap, tasks, event-bus and filesystem stats |
+| `GET` | `/api/v1/files/list?path=/fs` | List LittleFS directory entries |
+| `GET` | `/api/v1/files/read?path=/fs/...` | Read a text file (up to 8 KB) |
+| `GET` | `/api/v1/i2c/scan` | Scan the I2C bus for devices |
+| `GET` | `/api/v1/endpoints` | Catalogue of built-in API routes |
 | `POST` | `/api/v1/ota/upload` | Raw firmware binary (same file as `build/gallus_os.bin`) |
 
 Example:
@@ -195,19 +191,21 @@ GallusOS/
 │   └── gallus_sdk/             Module base class, registry, manager
 ├── modules/                    Compile-time application modules
 │   ├── hello_world/            Minimal SDK example
-│   └── gpio_blink/             GPIO reservation + blink demo
+│   ├── gpio_blink/             GPIO reservation + blink demo
+│   ├── system_info/            Periodic diagnostics logging
+│   └── i2c_scanner/            I2C bus scan demo
 ├── web/dashboard/              Browser dashboard (embedded at build time)
-├── tools/                      Manifest codegen, module CMake macro, image tool
+├── tools/                      Manifest codegen, SDK CLI, image tool
+├── tests/host/                 Host-side manifest validation tests
 ├── assets/splash/              Source PNGs for boot splash (optional regen)
 ├── partitions.csv              Flash partition table
 ├── sdkconfig.defaults          Default Kconfig (committed; sdkconfig is not)
-├── Development-Prompt.txt      Full architecture specification
 ├── LICENSE                     PolyForm Perimeter License 1.0.0
 └── NOTICE                      Plain-language license summary
 ```
 
-Directories `docs/`, `examples/`, and `tests/` are placeholders for
-Phase 6 work.
+Directories `docs/` and `examples/` are reserved for future documentation
+and sample projects.
 
 ---
 
@@ -230,6 +228,8 @@ Example modules:
 
 - **`hello_world`** — logging and scheduler only
 - **`gpio_blink`** — requests GPIO27 via `GpioService`, toggles the onboard LED
+- **`system_info`** — logs heap, event-bus and scheduler stats on a schedule
+- **`i2c_scanner`** — scans the shared I2C bus and logs found addresses
 
 Disable a module at runtime via config: namespace `modules`, key `<name>` =
 `false`.
@@ -240,9 +240,16 @@ Disable a module at runtime via config: namespace `modules`, key `<name>` =
 
 | Script | Purpose |
 |---|---|
+| `tools/gallus.py` | SDK CLI: `create-module`, `validate-module`, `validate-all`, `build`, `flash`, `monitor` |
 | `tools/gallus_manifest_gen.py` | Validates `manifest.json`, emits C++ registration |
 | `tools/gallus_module.cmake` | CMake macro called from module `CMakeLists.txt` |
 | `tools/gallus_image_gen.py` | Converts 128×64 PNG splash art to SSD1306 C arrays |
+
+Run host tests (no hardware required):
+
+```bash
+python3 tests/host/run_tests.py
+```
 
 To regenerate splash bitmaps (optional — pre-generated header is committed):
 
@@ -281,7 +288,7 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | 3 | mDNS, SNTP, module manager, API routes | Done |
 | 4 | Module codegen, example modules | Done |
 | 5 | Display, battery, OTA, web dashboard | Done |
-| 6 | SDK CLI, host tests, documentation | Planned |
+| 6 | SDK CLI, diagnostics UI, REST explorer, filesystem browser, host tests, CI | In progress |
 
 | Version | Value |
 |---|---|
@@ -289,7 +296,15 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | REST API | v1 |
 | Module API | not yet frozen |
 
-Roadmap detail: [Development-Prompt.txt](Development-Prompt.txt).
+Phase 6 work is on branch **`stage-6`**.
+
+### Phase 6 additions
+
+- **`tools/gallus.py`** — SDK CLI (`create-module`, `validate-module`, `validate-all`, `build`, `flash`, `monitor`)
+- **REST:** `/api/v1/diagnostics`, `/api/v1/files/list`, `/api/v1/files/read`, `/api/v1/i2c/scan`, `/api/v1/endpoints`
+- **Dashboard tabs:** Diagnostics, Filesystem browser, REST explorer
+- **Modules:** `system_info`, `i2c_scanner`
+- **CI:** `.github/workflows/ci.yml` + host manifest tests in `tests/host/`
 
 ---
 

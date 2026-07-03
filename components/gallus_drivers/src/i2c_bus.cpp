@@ -56,7 +56,7 @@ Status I2cBus::write(i2c_master_dev_handle_t dev, const uint8_t* data,
     return fromEspErr(i2c_master_transmit(dev, data, len, kWriteTimeoutMs));
 }
 
-bool I2cBus::probe(uint8_t address) {
+bool I2cBus::probe(uint8_t address) const {
     if (bus_ == nullptr) {
         return false;
     }

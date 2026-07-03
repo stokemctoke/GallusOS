@@ -59,6 +59,21 @@
   .muted { color:var(--tx1); font-size:12px; margin-top:8px; }
   footer { text-align:center; color:var(--tx2); font-size:12px;
     padding:20px; }
+  nav { display:flex; gap:8px; padding:12px 20px; background:var(--bg1);
+    border-bottom:1px solid var(--bg3); flex-wrap:wrap; }
+  nav button { background:transparent; color:var(--tx1); border:1px solid var(--bg3);
+    padding:8px 14px; font-size:13px; }
+  nav button.active { color:var(--bg0); background:var(--acc0); border-color:var(--acc0); }
+  .panel { display:none; }
+  .panel.active { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+    gap:16px; padding:20px; max-width:960px; margin:0 auto; }
+  pre, textarea, input[type=text] { width:100%; background:var(--bg0); color:var(--tx0);
+    border:1px solid var(--bg3); border-radius:8px; padding:10px; font-size:12px;
+    font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  textarea { min-height:120px; resize:vertical; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td, th { text-align:left; padding:6px 4px; border-bottom:1px solid var(--bg3); }
+  .linkish { color:var(--acc1); cursor:pointer; }
 </style>
 </head>
 <body>
@@ -68,7 +83,14 @@
     <span id="connText">connecting</span></div>
 </header>
 
-<main>
+<nav>
+  <button class="active" data-tab="dash">Dashboard</button>
+  <button data-tab="diag">Diagnostics</button>
+  <button data-tab="files">Filesystem</button>
+  <button data-tab="api">REST Explorer</button>
+</nav>
+
+<section id="panel-dash" class="panel active">
   <div class="card">
     <h2>System</h2>
     <div class="row"><span class="k">Firmware</span><span class="v" id="fw">-</span></div>
@@ -105,7 +127,40 @@
     <div class="bar"><i id="otabar"></i></div>
     <div class="muted" id="otamsg">Select a .bin firmware image to update over the air.</div>
   </div>
-</main>
+</section>
+
+<section id="panel-diag" class="panel">
+  <div class="card full">
+    <h2>Diagnostics</h2>
+    <div id="diagRows"></div>
+    <pre id="taskList" class="muted" style="margin-top:12px;white-space:pre-wrap"></pre>
+    <button id="diagRefresh" style="margin-top:12px">Refresh</button>
+  </div>
+</section>
+
+<section id="panel-files" class="panel">
+  <div class="card full">
+    <h2>Filesystem</h2>
+    <div class="row"><span class="k">Path</span><span class="v" id="fsPath">/fs</span></div>
+    <div id="fsEntries" style="margin-top:10px"></div>
+    <div style="margin-top:12px">
+      <div class="muted">File preview</div>
+      <pre id="fsPreview" style="margin-top:8px;white-space:pre-wrap"></pre>
+    </div>
+  </div>
+</section>
+
+<section id="panel-api" class="panel">
+  <div class="card full">
+    <h2>REST Explorer</h2>
+    <div id="apiList"></div>
+    <div style="margin-top:12px" class="row">
+      <input type="text" id="apiPath" value="/api/v1/system">
+      <button id="apiGo">Send GET</button>
+    </div>
+    <pre id="apiOut" style="margin-top:12px;white-space:pre-wrap"></pre>
+  </div>
+</section>
 
 <footer>GallusOS &middot; Gallus Gadgets</footer>
 
@@ -197,6 +252,99 @@ $("fwbtn").onclick = () => {
 refresh();
 setInterval(refresh, 15000);
 connectWs();
+
+document.querySelectorAll("nav button").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    $("panel-" + btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "diag") loadDiagnostics();
+    if (btn.dataset.tab === "files") loadFiles("/fs");
+    if (btn.dataset.tab === "api") loadEndpoints();
+  };
+});
+
+function row(k, v) {
+  return '<div class="row"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>';
+}
+
+async function loadDiagnostics() {
+  try {
+    const d = await api("diagnostics");
+    let html = row("Free heap", fmtKB(d.heap.free));
+    html += row("Min free heap", fmtKB(d.heap.min_free));
+    if (d.events) {
+      html += row("Events delivered", d.events.delivered);
+      html += row("Events dropped", d.events.dropped);
+    }
+    if (d.scheduler) html += row("Scheduler jobs", d.scheduler.active_jobs);
+    if (d.filesystem) {
+      html += row("FS used", fmtKB(d.filesystem.used_bytes));
+      html += row("FS total", fmtKB(d.filesystem.total_bytes));
+    }
+    if (d.tasks) html += row("Task count", d.tasks.count);
+    $("diagRows").innerHTML = html;
+    $("taskList").textContent = d.tasks && d.tasks.list ? d.tasks.list : "";
+  } catch (e) {
+    $("diagRows").innerHTML = '<div class="muted">Failed to load diagnostics.</div>';
+  }
+}
+$("diagRefresh").onclick = loadDiagnostics;
+
+async function loadFiles(path) {
+  $("fsPath").textContent = path;
+  try {
+    const d = await fetch("/api/v1/files/list?path=" + encodeURIComponent(path)).then(r => r.json());
+    $("fsEntries").innerHTML = '<table><tr><th>Name</th><th>Type</th><th>Size</th></tr>' +
+      d.entries.map(e => {
+        const full = path + (path.endsWith("/") ? "" : "/") + e.name;
+        const click = e.dir
+          ? 'loadFiles("' + full + '")'
+          : 'readFile("' + full + '")';
+        return '<tr><td><span class="linkish" onclick="' + click + '">' +
+          e.name + '</span></td><td>' + (e.dir ? "dir" : "file") +
+          '</td><td>' + e.size + '</td></tr>';
+      }).join("") + '</table>';
+  } catch (e) {
+    $("fsEntries").innerHTML = '<div class="muted">Unable to list directory.</div>';
+  }
+}
+
+async function readFile(path) {
+  try {
+    const d = await fetch("/api/v1/files/read?path=" + encodeURIComponent(path)).then(r => r.json());
+    $("fsPreview").textContent = d.content || "";
+  } catch (e) {
+    $("fsPreview").textContent = "Read failed.";
+  }
+}
+
+async function loadEndpoints() {
+  try {
+    const d = await api("endpoints");
+    $("apiList").innerHTML = '<table><tr><th>Method</th><th>Path</th><th>Description</th></tr>' +
+      d.endpoints.map(e =>
+        '<tr><td>' + e.method + '</td><td><span class="linkish" onclick="setApiPath(\'' +
+        e.path + '\')">' + e.path + '</span></td><td>' + e.description + '</td></tr>'
+      ).join("") + '</table>';
+  } catch (e) {
+    $("apiList").innerHTML = '<div class="muted">Failed to load endpoints.</div>';
+  }
+}
+
+function setApiPath(path) { $("apiPath").value = path; }
+
+$("apiGo").onclick = async () => {
+  const path = $("apiPath").value;
+  try {
+    const text = await fetch(path).then(r => r.text());
+    try { $("apiOut").textContent = JSON.stringify(JSON.parse(text), null, 2); }
+    catch (e) { $("apiOut").textContent = text; }
+  } catch (e) {
+    $("apiOut").textContent = "Request failed.";
+  }
+};
 </script>
 </body>
 </html>

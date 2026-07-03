@@ -1,0 +1,5 @@
+{
+  "i2c_scanner": {
+    "period_ms": 30000
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "i2c_scanner",
+  "version": "0.1.0",
+  "description": "Scans the shared I2C bus and logs responding device addresses.",
+  "author": "Gallus Gadgets",
+  "license": "PolyForm-Perimeter-1.0.0",
+  "category": "Diagnostics",
+  "menu_icon": "scan",
+  "required_services": ["config", "scheduler", "i2c"],
+  "required_gpio": [],
+  "events_published": [],
+  "events_consumed": [],
+  "capabilities": []
+}

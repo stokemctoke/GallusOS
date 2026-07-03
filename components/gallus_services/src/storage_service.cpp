@@ -2,6 +2,8 @@
 
 #include <cerrno>
 #include <cstdio>
+#include <cstring>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -146,6 +148,61 @@ Status StorageService::makeDir(const char* path) {
         return Error::Internal;
     }
     return Status::success();
+}
+
+Result<size_t> StorageService::listDir(const char* path, DirEntry* out,
+                                       size_t max) const {
+    if (!mounted_) {
+        return Error::InvalidState;
+    }
+    if (path == nullptr || out == nullptr || max == 0) {
+        return Error::InvalidArg;
+    }
+
+    DIR* dir = opendir(path);
+    if (dir == nullptr) {
+        return Error::NotFound;
+    }
+
+    size_t count = 0;
+    while (count < max) {
+        const dirent* entry = readdir(dir);
+        if (entry == nullptr) {
+            break;
+        }
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        const size_t name_len =
+            strnlen(entry->d_name, sizeof(DirEntry::name) - 1);
+        if (name_len >= sizeof(DirEntry::name) - 1) {
+            continue;
+        }
+
+        char full_path[160];
+        const int path_len = snprintf(full_path, sizeof(full_path), "%s/%.*s",
+                                      path, static_cast<int>(name_len),
+                                      entry->d_name);
+        if (path_len <= 0 ||
+            static_cast<size_t>(path_len) >= sizeof(full_path)) {
+            continue;
+        }
+
+        struct stat st = {};
+        if (stat(full_path, &st) != 0) {
+            continue;
+        }
+
+        DirEntry& row = out[count++];
+        memcpy(row.name, entry->d_name, name_len);
+        row.name[name_len] = '\0';
+        row.is_dir = S_ISDIR(st.st_mode);
+        row.size = static_cast<size_t>(st.st_size);
+    }
+    closedir(dir);
+    return count;
 }
 
 }  // namespace gallus::services

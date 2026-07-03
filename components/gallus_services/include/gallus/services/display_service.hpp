@@ -9,6 +9,7 @@
 #include "gallus/drivers/ssd1306.hpp"
 #include "gallus/error.hpp"
 #include "gallus/event_bus.hpp"
+#include "gallus/services/i2c_service.hpp"
 
 /// @file display_service.hpp
 /// @brief The OLED companion display.
@@ -27,8 +28,8 @@ namespace gallus::services {
 
 class DisplayService {
 public:
-    DisplayService(EventBus& events, int sda, int scl)
-        : events_(events), sda_(sda), scl_(scl) {}
+    DisplayService(EventBus& events, I2cService& i2c)
+        : events_(events), i2c_(i2c) {}
     DisplayService(const DisplayService&) = delete;
     DisplayService& operator=(const DisplayService&) = delete;
 
@@ -61,10 +62,8 @@ private:
     void drawText(int x, int y, const char* text, bool on = true);
 
     EventBus& events_;
-    drivers::I2cBus bus_;
+    I2cService& i2c_;
     drivers::Ssd1306 panel_;
-    int sda_;
-    int scl_;
     StatusState status_ = {};
     SemaphoreHandle_t mutex_ = nullptr;
     bool present_ = false;

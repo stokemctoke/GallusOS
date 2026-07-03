@@ -7,6 +7,7 @@
 #include "gallus/scheduler.hpp"
 #include "gallus/services/config_service.hpp"
 #include "gallus/services/gpio_service.hpp"
+#include "gallus/services/i2c_service.hpp"
 #include "gallus/services/rest_service.hpp"
 #include "gallus/services/storage_service.hpp"
 
@@ -34,6 +35,7 @@ struct ModuleContext {
     services::StorageService& storage;
     services::GpioService& gpio;
     services::RestService& rest;
+    services::I2cService& i2c;
 };
 
 /// Module metadata, generated from manifest.json at build time.

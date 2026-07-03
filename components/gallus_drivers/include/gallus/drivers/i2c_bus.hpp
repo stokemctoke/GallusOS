@@ -34,7 +34,7 @@ public:
                  size_t len);
 
     /// Probe whether @p address acknowledges on the bus.
-    [[nodiscard]] bool probe(uint8_t address);
+    [[nodiscard]] bool probe(uint8_t address) const;
 
     [[nodiscard]] bool ready() const { return bus_ != nullptr; }
 

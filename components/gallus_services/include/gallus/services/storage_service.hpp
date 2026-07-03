@@ -13,6 +13,13 @@
 
 namespace gallus::services {
 
+/// One entry returned by listDir().
+struct DirEntry {
+    char name[48];
+    bool is_dir;
+    size_t size;
+};
+
 class StorageService {
 public:
     static constexpr const char* kBasePath = "/fs";
@@ -45,6 +52,10 @@ public:
 
     /// Create a directory (no error if it already exists).
     Status makeDir(const char* path);
+
+    /// List entries in @p path. Returns the number written to @p out.
+    Result<size_t> listDir(const char* path, DirEntry* out,
+                           size_t max) const;
 
 private:
     bool mounted_ = false;

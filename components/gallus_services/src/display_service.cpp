@@ -42,19 +42,18 @@ Status DisplayService::init() {
         return Error::NoMemory;
     }
 
-    Status status = bus_.init(sda_, scl_);
-    if (!status.ok()) {
-        return status;
+    if (!i2c_.ready()) {
+        return Error::InvalidState;
     }
 
     // Probe first so a headless board degrades gracefully.
-    if (!bus_.probe(drivers::Ssd1306::kDefaultAddress)) {
+    if (!i2c_.bus().probe(drivers::Ssd1306::kDefaultAddress)) {
         Log::warn(kTag, "no SSD1306 at 0x%02X — running headless",
                   drivers::Ssd1306::kDefaultAddress);
         return Error::NotFound;
     }
 
-    status = panel_.init(bus_);
+    Status status = panel_.init(i2c_.bus());
     if (!status.ok()) {
         return status;
     }

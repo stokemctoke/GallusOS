@@ -16,6 +16,7 @@
 #include "gallus/services/config_service.hpp"
 #include "gallus/services/display_service.hpp"
 #include "gallus/services/gpio_service.hpp"
+#include "gallus/services/i2c_service.hpp"
 #include "gallus/services/network_service.hpp"
 #include "gallus/services/ota_service.hpp"
 #include "gallus/services/rest_service.hpp"
@@ -63,13 +64,13 @@ extern "C" void app_main(void) {
     static gallus::services::StorageService storage;
     static gallus::services::ConfigService config(storage, kernel.events());
     static gallus::services::GpioService gpio(kernel.events());
+    static gallus::services::I2cService i2c;
     static gallus::services::RestService rest(config);
     static gallus::services::WifiService wifi(config, kernel.events(), rest);
     static gallus::services::NetworkService network(config, kernel.events());
     static gallus::services::TimeService time_service(kernel.events());
     static gallus::services::DisplayService display(
-        kernel.events(), gallus::hal::board::kPinI2cSda,
-        gallus::hal::board::kPinI2cScl);
+        kernel.events(), i2c);
     static gallus::services::BatteryService battery(
         kernel.events(), kernel.scheduler(),
         gallus::hal::board::kPinBatteryAdc,
@@ -80,6 +81,9 @@ extern "C" void app_main(void) {
     check("storage init", storage.init());
     check("config init", config.init());
     check("gpio init", gpio.init());
+    check("i2c init",
+          i2c.init(gallus::hal::board::kPinI2cSda,
+                   gallus::hal::board::kPinI2cScl));
 
     // Bring the OLED up early and play the splash while the rest of
     // the system (and WiFi) comes online. init() returns NotFound
@@ -102,13 +106,14 @@ extern "C" void app_main(void) {
 
     // Modules: everything the manifest codegen registered at build time.
     static gallus::sdk::ModuleContext module_ctx = {
-        kernel.events(), kernel.scheduler(), config, storage, gpio, rest,
+        kernel.events(), kernel.scheduler(), config, storage, gpio, rest, i2c,
     };
     static gallus::sdk::ModuleManager modules(module_ctx);
     check("modules init", modules.initAll());
 
-    static gallus::app::ApiContext api_ctx = {&rest, &config, &gpio,
-                                              &modules, &battery};
+    static gallus::app::ApiContext api_ctx = {&rest,    &config, &gpio,
+                                              &storage, &i2c,    &modules,
+                                              &battery, &kernel};
     check("api routes", gallus::app::registerApiRoutes(api_ctx));
 
     check("ota init", ota.init());

@@ -126,6 +126,7 @@ extern "C" void app_main(void) {
     // Modules: everything the manifest codegen registered at build time.
     static gallus::sdk::ModuleContext module_ctx = {
         kernel.events(), kernel.scheduler(), config, storage, gpio, rest, i2c,
+        wifi,
     };
     static gallus::sdk::ModuleManager modules(module_ctx);
     static ModuleHookCtx module_hooks = {.modules = &modules};

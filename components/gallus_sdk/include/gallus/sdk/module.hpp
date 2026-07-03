@@ -10,6 +10,7 @@
 #include "gallus/services/i2c_service.hpp"
 #include "gallus/services/rest_service.hpp"
 #include "gallus/services/storage_service.hpp"
+#include "gallus/services/wifi_service.hpp"
 
 /// @file module.hpp
 /// @brief The GallusOS Module SDK: what a module is and what it gets.
@@ -36,6 +37,7 @@ struct ModuleContext {
     services::GpioService& gpio;
     services::RestService& rest;
     services::I2cService& i2c;
+    services::WifiService& wifi;
 };
 
 /// Module metadata, generated from manifest.json at build time.

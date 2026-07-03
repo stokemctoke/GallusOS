@@ -525,6 +525,59 @@ esp_err_t i2cScanHandler(httpd_req_t* req) {
     return sendJson(req, doc);
 }
 
+esp_err_t wifiScanHandler(httpd_req_t* req) {
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (!ctx->rest->authorize(req)) {
+        return ESP_OK;
+    }
+    if (ctx->wifi == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "wifi not ready");
+    }
+
+    char band_query[8] = {};
+    char query[32] = {};
+    if (httpd_req_get_url_query_len(req) + 1 <= sizeof(query) &&
+        httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        (void)httpd_query_key_value(query, "band", band_query,
+                                    sizeof(band_query));
+    }
+    services::WifiService::ScanBand bands =
+        services::WifiService::ScanBand::Both;
+    if (band_query[0] == '5') {
+        bands = services::WifiService::ScanBand::Band5G;
+    } else if (band_query[0] == '2') {
+        bands = services::WifiService::ScanBand::Band2G;
+    }
+
+    services::WifiService::ApRecord records
+        [services::WifiService::kMaxScanResults];
+    const auto found = ctx->wifi->scan(
+        records, sizeof(records) / sizeof(records[0]), bands);
+    if (!found.ok()) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   found.message());
+    }
+
+    cJSON* doc = cJSON_CreateObject();
+    cJSON* list = cJSON_AddArrayToObject(doc, "networks");
+    for (size_t i = 0; i < found.value(); ++i) {
+        const auto& ap = records[i];
+        cJSON* item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "ssid", ap.ssid);
+        cJSON_AddNumberToObject(item, "rssi", ap.rssi);
+        cJSON_AddNumberToObject(item, "channel", ap.channel);
+        cJSON_AddNumberToObject(item, "band_ghz", ap.band_ghz);
+        char bssid[18] = {};
+        snprintf(bssid, sizeof(bssid), "%02X:%02X:%02X:%02X:%02X:%02X",
+                 ap.bssid[0], ap.bssid[1], ap.bssid[2], ap.bssid[3],
+                 ap.bssid[4], ap.bssid[5]);
+        cJSON_AddStringToObject(item, "bssid", bssid);
+        cJSON_AddItemToArray(list, item);
+    }
+    return sendJson(req, doc);
+}
+
 esp_err_t endpointsHandler(httpd_req_t* req) {
     auto* ctx = static_cast<ApiContext*>(req->user_ctx);
     if (!ctx->rest->authorize(req)) {
@@ -547,6 +600,7 @@ esp_err_t endpointsHandler(httpd_req_t* req) {
         {"GET", "/api/v1/files/list?path=/fs", "List directory entries"},
         {"GET", "/api/v1/files/read?path=/fs/...", "Read a text file"},
         {"GET", "/api/v1/i2c/scan", "Scan the I2C bus"},
+        {"GET", "/api/v1/wifi/scan?band=both", "Scan WiFi networks (2.4/5/both)"},
         {"GET", "/api/v1/config?namespace=system", "Read a config namespace"},
         {"PUT", "/api/v1/config", "Update config namespace values"},
         {"POST", "/api/v1/system/reboot", "Reboot the device"},
@@ -607,6 +661,11 @@ Status registerApiRoutes(ApiContext& ctx) {
     }
     status = ctx.rest->registerRoute(HTTP_GET, "/api/v1/i2c/scan",
                                      &i2cScanHandler, &ctx);
+    if (!status.ok()) {
+        return status;
+    }
+    status = ctx.rest->registerRoute(HTTP_GET, "/api/v1/wifi/scan",
+                                     &wifiScanHandler, &ctx);
     if (!status.ok()) {
         return status;
     }

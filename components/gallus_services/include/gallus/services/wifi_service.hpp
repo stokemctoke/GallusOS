@@ -1,16 +1,19 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
-
-#include "esp_event.h"
-#include "esp_netif.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 #include "gallus/error.hpp"
 #include "gallus/event_bus.hpp"
 #include "gallus/services/config_service.hpp"
 #include "gallus/services/rest_service.hpp"
+
+#ifndef GALLUS_HOST
+#include "esp_event.h"
+#include "esp_netif.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#endif
 
 /// @file wifi_service.hpp
 /// @brief WiFi connectivity and first-boot provisioning.
@@ -63,8 +66,32 @@ public:
     /// charge mode.
     Status reconnectSta();
 
+    /// WiFi band filter for scan().
+    enum class ScanBand : uint8_t {
+        Band2G = 0,
+        Band5G = 1,
+        Both = 2,
+    };
+
+    /// One AP entry from a scan.
+    struct ApRecord {
+        char ssid[33];
+        uint8_t bssid[6];
+        int8_t rssi;
+        uint8_t channel;
+        uint8_t band_ghz;  ///< 2 or 5
+    };
+
+    static constexpr size_t kMaxScanResults = 32;
+
+    /// Blocking scan. Writes up to @p max records to @p out and returns
+    /// the count. Requires the radio up and not in provisioning mode.
+    Result<size_t> scan(ApRecord* out, size_t max,
+                        ScanBand bands = ScanBand::Both);
+
     [[nodiscard]] bool provisioning() const { return provisioning_; }
 
+#ifndef GALLUS_HOST
 private:
     static void wifiEventHandler(void* arg, esp_event_base_t base,
                                  int32_t id, void* data);
@@ -76,22 +103,22 @@ private:
     void applyStaticIp();
     void configureApNetif();
 
-    // Captive portal HTTP handlers (registered on RestService).
     static esp_err_t portalGetHandler(httpd_req_t* req);
     static esp_err_t portalPostHandler(httpd_req_t* req);
 
-    // Hijack DNS server (everything resolves to the AP address).
     static void dnsTaskEntry(void* arg);
     void dnsLoop();
 
-    ConfigService& config_;
-    EventBus& events_;
-    RestService& rest_;
     esp_netif_t* sta_netif_ = nullptr;
     esp_netif_t* ap_netif_ = nullptr;
     TaskHandle_t dns_task_ = nullptr;
     int dns_sock_ = -1;
     int retry_count_ = 0;
+#endif
+
+    ConfigService& config_;
+    EventBus& events_;
+    RestService& rest_;
     bool provisioning_ = false;
     bool radio_stopped_ = false;
     bool initialized_ = false;

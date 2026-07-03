@@ -1,0 +1,14 @@
+{
+  "name": "wifi_scan",
+  "version": "0.1.0",
+  "description": "Periodic dual-band WiFi survey (2.4 GHz and 5 GHz on ESP32-C5).",
+  "author": "Gallus Gadgets",
+  "license": "PolyForm-Perimeter-1.0.0",
+  "category": "WiFi",
+  "menu_icon": "wifi",
+  "required_services": ["config", "scheduler", "wifi"],
+  "required_gpio": [],
+  "events_published": [],
+  "events_consumed": [],
+  "capabilities": ["wifi_scan_dual_band"]
+}

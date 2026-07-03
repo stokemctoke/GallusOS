@@ -12,6 +12,7 @@
 
 #include "gallus/kernel.hpp"
 #include "gallus/log.hpp"
+#include "gallus/error.hpp"
 
 namespace gallus::services {
 
@@ -224,6 +225,119 @@ Status WifiService::reconnectSta() {
     (void)esp_wifi_stop();
     Log::info(kTag, "reconnecting to '%s'...", ssid);
     return startSta(ssid, password);
+}
+
+namespace {
+
+bool channelIs5G(uint8_t channel) { return channel >= 36; }
+
+bool bssidEqual(const uint8_t* a, const uint8_t* b) {
+    for (int i = 0; i < 6; ++i) {
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool alreadyListed(const WifiService::ApRecord* out, size_t count,
+                   const uint8_t* bssid) {
+    for (size_t i = 0; i < count; ++i) {
+        if (bssidEqual(out[i].bssid, bssid)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void copyApRecord(WifiService::ApRecord* dst, const wifi_ap_record_t& src,
+                  uint8_t band_ghz) {
+    std::memcpy(dst->ssid, src.ssid, sizeof(dst->ssid));
+    std::memcpy(dst->bssid, src.bssid, sizeof(dst->bssid));
+    dst->rssi = src.rssi;
+    dst->channel = src.primary;
+    dst->band_ghz = band_ghz != 0 ? band_ghz
+                                  : (channelIs5G(src.primary) ? 5 : 2);
+}
+
+Status scanBand(WifiService::ApRecord* out, size_t max, size_t& total,
+#if CONFIG_SOC_WIFI_SUPPORT_5G
+                wifi_band_t band,
+#endif
+                uint8_t band_ghz) {
+#if CONFIG_SOC_WIFI_SUPPORT_5G
+    const esp_err_t band_err = esp_wifi_set_band(band);
+    if (band_err != ESP_OK) {
+        return fromEspErr(band_err);
+    }
+#endif
+
+    wifi_scan_config_t scan_config = {};
+    scan_config.show_hidden = false;
+
+    esp_err_t err = esp_wifi_scan_start(&scan_config, true);
+    if (err != ESP_OK) {
+        return fromEspErr(err);
+    }
+
+    uint16_t ap_count = 0;
+    err = esp_wifi_scan_get_ap_num(&ap_count);
+    if (err != ESP_OK) {
+        return fromEspErr(err);
+    }
+    if (ap_count == 0) {
+        return Status::success();
+    }
+
+    wifi_ap_record_t records[WifiService::kMaxScanResults];
+    if (ap_count > WifiService::kMaxScanResults) {
+        ap_count = static_cast<uint16_t>(WifiService::kMaxScanResults);
+    }
+    err = esp_wifi_scan_get_ap_records(&ap_count, records);
+    if (err != ESP_OK) {
+        return fromEspErr(err);
+    }
+
+    for (uint16_t i = 0; i < ap_count && total < max; ++i) {
+        if (alreadyListed(out, total, records[i].bssid)) {
+            continue;
+        }
+        copyApRecord(&out[total], records[i], band_ghz);
+        ++total;
+    }
+    return Status::success();
+}
+
+}  // namespace
+
+Result<size_t> WifiService::scan(ApRecord* out, size_t max, ScanBand bands) {
+    if (!initialized_ || provisioning_ || radio_stopped_) {
+        return Error::InvalidState;
+    }
+    if (out == nullptr || max == 0) {
+        return Error::InvalidArg;
+    }
+
+    size_t total = 0;
+#if CONFIG_SOC_WIFI_SUPPORT_5G
+    wifi_band_t saved_band = WIFI_BAND_2G;
+    (void)esp_wifi_get_band(&saved_band);
+
+    if (bands == ScanBand::Band2G || bands == ScanBand::Both) {
+        GALLUS_RETURN_IF_ERROR(
+            scanBand(out, max, total, WIFI_BAND_2G, 2));
+    }
+    if (bands == ScanBand::Band5G || bands == ScanBand::Both) {
+        GALLUS_RETURN_IF_ERROR(
+            scanBand(out, max, total, WIFI_BAND_5G, 5));
+    }
+
+    (void)esp_wifi_set_band(saved_band);
+#else
+    (void)bands;
+    GALLUS_RETURN_IF_ERROR(scanBand(out, max, total, 0));
+#endif
+    return total;
 }
 
 void WifiService::applyStaticIp() {

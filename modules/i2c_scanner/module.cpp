@@ -1,5 +1,7 @@
 /// I2C Scanner — probes the bus and logs found 7-bit addresses.
 
+#include <cstdio>
+
 #include "gallus/log.hpp"
 #include "gallus/sdk/module.hpp"
 

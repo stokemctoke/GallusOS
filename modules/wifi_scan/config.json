@@ -1,0 +1,6 @@
+{
+  "wifi_scan": {
+    "period_ms": 60000,
+    "band": "both"
+  }
+}

@@ -146,8 +146,9 @@ Status Scheduler::cancel(JobHandle handle) {
         xSemaphoreGive(mutex_);
         return Error::NotFound;
     }
-    releaseSlotLocked(job);
+    const esp_timer_handle_t timer = detachTimerLocked(job);
     xSemaphoreGive(mutex_);
+    stopTimer(timer);
     return Status::success();
 }
 
@@ -164,16 +165,23 @@ size_t Scheduler::activeJobs() const {
 }
 
 /// Stops and deletes the job's timer and frees the slot. Caller holds
-/// mutex_.
-void Scheduler::releaseSlotLocked(Job& job) {
-    if (job.timer != nullptr) {
-        (void)esp_timer_stop(job.timer);  // fails harmlessly if not running
-        (void)esp_timer_delete(job.timer);
-        job.timer = nullptr;
-    }
+/// mutex_. Returns the timer handle so the caller can stop it after
+/// releasing the lock (avoids deadlocks with the host esp_timer shim).
+esp_timer_handle_t Scheduler::detachTimerLocked(Job& job) {
+    esp_timer_handle_t timer = job.timer;
+    job.timer = nullptr;
     job.active = false;
     job.fn = nullptr;
     job.ctx = nullptr;
+    return timer;
+}
+
+void Scheduler::stopTimer(esp_timer_handle_t timer) {
+    if (timer == nullptr) {
+        return;
+    }
+    (void)esp_timer_stop(timer);
+    (void)esp_timer_delete(timer);
 }
 
 /// Runs on the esp_timer task: validate the job and hand it to the
@@ -216,13 +224,14 @@ void Scheduler::workerTaskEntry(void* arg) {
         item.fn(item.ctx);
 
         if (item.release_after_run) {
-            // One-shot job: free the slot unless cancel() beat us to it.
+            esp_timer_handle_t timer = nullptr;
             xSemaphoreTake(self->mutex_, portMAX_DELAY);
             Job& job = self->jobs_[item.slot];
             if (job.active && job.generation == item.generation) {
-                self->releaseSlotLocked(job);
+                timer = self->detachTimerLocked(job);
             }
             xSemaphoreGive(self->mutex_);
+            stopTimer(timer);
         }
     }
 }

@@ -97,7 +97,8 @@ private:
                                Priority priority, bool periodic);
     static void timerCallback(void* arg);
     static void workerTaskEntry(void* arg);
-    void releaseSlotLocked(Job& job);
+    esp_timer_handle_t detachTimerLocked(Job& job);
+    static void stopTimer(esp_timer_handle_t timer);
 
     struct WorkerContext {
         Scheduler* scheduler = nullptr;

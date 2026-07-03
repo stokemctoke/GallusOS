@@ -5,7 +5,9 @@
 
 # GallusOS: A Modular Embedded Operating Environment
 
-**Current release:** [v0.1.0](https://github.com/stokemctoke/GallusOS/tree/master) — kernel & services stack, compile-time modules, captive WiFi provisioning, browser dashboard (REST v1 + WebSocket), OTA rollback, charge mode, WiFi re-provision, config editor, diagnostics, mDNS.
+**Current release:** [v0.1.0](https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.0) — kernel & services stack, compile-time modules, captive WiFi provisioning, browser dashboard (REST v1 + WebSocket), OTA rollback, charge mode, WiFi re-provision, config editor, diagnostics, mDNS, dual-band WiFi scan module, host simulation, SDK CLI.
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ![GallusOS overview](GallusOS_header.jpg)
 
@@ -346,13 +348,13 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | 7 | Config REST API, Settings tab, DiagnosticsService, live log stream, charge mode | Done |
 | 8 | WiFi re-provision, config editor, README header | Done |
 | 9 | Host simulation (kernel harness, mock services, hello_world) | Done |
-| 10 | SDK CLI polish, GitHub release, module API freeze (planned) | Planned |
+| 10 | SDK CLI polish, GitHub release, wifi_scan, module API freeze | Done |
 
 | Version | Value |
 |---|---|
 | Firmware | 0.1.0 |
 | REST API | v1 |
-| Module API | not yet frozen |
+| Module API | v1 (frozen — see [docs/MODULE_API.md](docs/MODULE_API.md)) |
 
 Phase 10 work is on branch **`stage-10`**.
 
@@ -372,10 +374,10 @@ Phase 10 work is on branch **`stage-10`**.
 
 ### Phase 6 additions
 
-- **`tools/gallus.py`** — SDK CLI (`create-module`, `validate-module`, `validate-all`, `build`, `flash`, `monitor`)
+- **`tools/gallus.py`** — SDK CLI (`create-module`, `validate-module`, `validate-all`, `lint`, `generate-docs`, `host-sim`, `build`, `flash`, `monitor`)
 - **REST:** `/api/v1/diagnostics`, `/api/v1/files/list`, `/api/v1/files/read`, `/api/v1/i2c/scan`, `/api/v1/endpoints`
 - **Dashboard tabs:** Diagnostics, Filesystem browser, REST explorer
-- **Modules:** `system_info`, `i2c_scanner`
+- **Modules:** `system_info`, `i2c_scanner`, `wifi_scan`
 - **CI:** `.github/workflows/ci.yml` + host manifest tests in `tests/host/`
 
 ### Phase 7 additions
@@ -387,12 +389,13 @@ Phase 10 work is on branch **`stage-10`**.
 - **SDK CLI:** `create-service`, `create-driver` scaffolds
 - **Fixes:** Network card WiFi/IP on page load; provisioning portal takes precedence over dashboard on `GET /`
 
-### Phase 10 (planned)
+### Phase 10 additions
 
-- **SDK CLI:** `generate-docs`, `lint`, richer `validate` checks
-- **GitHub release** — tag v0.1.0 with flash instructions and changelog
-- **Host simulation** — more modules and service mocks on desktop
-- **Module API freeze** — after host sim and CLI polish (last)
+- **GitHub release** — [v0.1.0](https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.0) tag with [CHANGELOG.md](CHANGELOG.md)
+- **Host simulation** — all example modules on desktop (`hello_world`, `gpio_blink`, `i2c_scanner`, `system_info`, `wifi_scan`)
+- **SDK CLI** — `lint`, `generate-docs`, richer `validate-module` (structure + ModuleContext checks)
+- **`wifi_scan` module** — dual-band (2.4 / 5 GHz) survey via `WifiService::scan()`; REST `GET /api/v1/wifi/scan`
+- **Module API v1** — frozen in [docs/MODULE_API.md](docs/MODULE_API.md); `WifiService` on `ModuleContext`
 
 ---
 

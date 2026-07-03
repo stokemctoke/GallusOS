@@ -262,18 +262,26 @@ void copyApRecord(WifiService::ApRecord* dst, const wifi_ap_record_t& src,
                                   : (channelIs5G(src.primary) ? 5 : 2);
 }
 
-Status scanBand(WifiService::ApRecord* out, size_t max, size_t& total,
-#if CONFIG_SOC_WIFI_SUPPORT_5G
-                wifi_band_t band,
-#endif
-                uint8_t band_ghz) {
-#if CONFIG_SOC_WIFI_SUPPORT_5G
-    const esp_err_t band_err = esp_wifi_set_band(band);
-    if (band_err != ESP_OK) {
-        return fromEspErr(band_err);
-    }
-#endif
+enum class BandFilter : uint8_t {
+    All = 0,
+    Only2G,
+    Only5G,
+};
 
+bool bandMatches(BandFilter filter, uint8_t channel) {
+    switch (filter) {
+        case BandFilter::Only2G:
+            return !channelIs5G(channel);
+        case BandFilter::Only5G:
+            return channelIs5G(channel);
+        case BandFilter::All:
+            return true;
+    }
+    return true;
+}
+
+Status runScan(WifiService::ApRecord* out, size_t max, size_t& total,
+               BandFilter filter) {
     wifi_scan_config_t scan_config = {};
     scan_config.show_hidden = false;
 
@@ -308,10 +316,13 @@ Status scanBand(WifiService::ApRecord* out, size_t max, size_t& total,
     }
 
     for (uint16_t i = 0; i < ap_count && total < max; ++i) {
+        if (!bandMatches(filter, records[i].primary)) {
+            continue;
+        }
         if (alreadyListed(out, total, records[i].bssid)) {
             continue;
         }
-        copyApRecord(&out[total], records[i], band_ghz);
+        copyApRecord(&out[total], records[i], 0);
         ++total;
     }
     std::free(records);
@@ -329,24 +340,13 @@ Result<size_t> WifiService::scan(ApRecord* out, size_t max, ScanBand bands) {
     }
 
     size_t total = 0;
-#if CONFIG_SOC_WIFI_SUPPORT_5G
-    wifi_band_t saved_band = WIFI_BAND_2G;
-    (void)esp_wifi_get_band(&saved_band);
-
-    if (bands == ScanBand::Band2G || bands == ScanBand::Both) {
-        GALLUS_RETURN_IF_ERROR(
-            scanBand(out, max, total, WIFI_BAND_2G, 2));
+    BandFilter filter = BandFilter::All;
+    if (bands == ScanBand::Band2G) {
+        filter = BandFilter::Only2G;
+    } else if (bands == ScanBand::Band5G) {
+        filter = BandFilter::Only5G;
     }
-    if (bands == ScanBand::Band5G || bands == ScanBand::Both) {
-        GALLUS_RETURN_IF_ERROR(
-            scanBand(out, max, total, WIFI_BAND_5G, 5));
-    }
-
-    (void)esp_wifi_set_band(saved_band);
-#else
-    (void)bands;
-    GALLUS_RETURN_IF_ERROR(scanBand(out, max, total, 0));
-#endif
+    GALLUS_RETURN_IF_ERROR(runScan(out, max, total, filter));
     return total;
 }
 

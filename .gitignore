@@ -1,6 +1,9 @@
 # =============================================================================
-# GallusOS — files not required to compile from a fresh clone
+# Gallos OS — files not required to compile from a fresh clone
 # =============================================================================
+
+# --- Authoritative local spec (kept out of version control) ---
+Development-Prompt.txt
 
 # --- ESP-IDF build tree (removed by `idf.py clean` / `idf.py fullclean`) ---
 build/

@@ -356,7 +356,7 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | REST API | v1 |
 | Module API | v1 (frozen — see [docs/MODULE_API.md](docs/MODULE_API.md)) |
 
-Phase 10 work is on branch **`stage-10`**.
+Phase 11 work is on branch **`stage-11`**.
 
 ### Phase 9 additions
 

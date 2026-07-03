@@ -22,7 +22,7 @@
 /// Provisioning path: when no SSID is configured, or the connection
 /// fails kMaxRetries times, the service starts an open SoftAP
 /// ("GallusOS-XXXX") with a captive portal: a hijack DNS server that
-/// answers every query with 192.168.4.1 plus a credentials form
+/// answers every query with 192.168.42.1 plus a credentials form
 /// served through RestService. Saving the form persists the
 /// credentials and reboots into the normal path.
 
@@ -58,6 +58,8 @@ private:
 
     Status startSta(const char* ssid, const char* password);
     Status startProvisioning();
+    void applyStaticIp();
+    void configureApNetif();
 
     // Captive portal HTTP handlers (registered on RestService).
     static esp_err_t portalGetHandler(httpd_req_t* req);

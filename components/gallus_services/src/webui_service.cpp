@@ -12,6 +12,8 @@
 /// Embedded gzipped dashboard (see gallus_services CMakeLists.txt).
 extern const uint8_t kDashboardStart[] asm("_binary_index_html_gz_start");
 extern const uint8_t kDashboardEnd[] asm("_binary_index_html_gz_end");
+extern const uint8_t kFaviconStart[] asm("_binary_favicon_png_start");
+extern const uint8_t kFaviconEnd[] asm("_binary_favicon_png_end");
 
 namespace gallus::services {
 
@@ -59,6 +61,10 @@ Status WebUiService::init() {
 
     GALLUS_RETURN_IF_ERROR(
         rest_.registerRoute(HTTP_GET, "/", &pageHandler, this));
+    GALLUS_RETURN_IF_ERROR(
+        rest_.registerRoute(HTTP_GET, "/favicon.ico", &faviconHandler, this));
+    GALLUS_RETURN_IF_ERROR(
+        rest_.registerRoute(HTTP_GET, "/favicon.png", &faviconHandler, this));
     GALLUS_RETURN_IF_ERROR(rest_.registerWebSocket("/ws", &wsHandler, this));
 
     GALLUS_RETURN_IF_ERROR(
@@ -81,6 +87,14 @@ esp_err_t WebUiService::pageHandler(httpd_req_t* req) {
     httpd_resp_set_type(req, "text/html");
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
     return httpd_resp_send(req, reinterpret_cast<const char*>(kDashboardStart),
+                           len);
+}
+
+esp_err_t WebUiService::faviconHandler(httpd_req_t* req) {
+    const size_t len = kFaviconEnd - kFaviconStart;
+    httpd_resp_set_type(req, "image/png");
+    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=86400");
+    return httpd_resp_send(req, reinterpret_cast<const char*>(kFaviconStart),
                            len);
 }
 

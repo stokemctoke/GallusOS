@@ -65,7 +65,7 @@ void DisplayService::playSplash() {
     if (!present_) {
         return;
     }
-    flickerTo(assets::kLogo, 2);
+    flickerPair(assets::kLogo, assets::kLogoinv, 2);
     delayMs(650);
     flickerTo(assets::kPuregallus, 2);
     delayMs(650);
@@ -86,6 +86,24 @@ void DisplayService::flickerTo(const uint8_t* frame, int flashes) {
         (void)panel_.setInverted(false);
         delayMs(60);
     }
+    xSemaphoreGive(mutex_);
+}
+
+/// Alternate between two prepared frames (e.g. black-on-white and
+/// white-on-black artwork) for the opening logo flicker.
+void DisplayService::flickerPair(const uint8_t* light, const uint8_t* dark,
+                                 int flashes) {
+    xSemaphoreTake(mutex_, portMAX_DELAY);
+    for (int i = 0; i < flashes; ++i) {
+        panel_.drawFrame(light);
+        (void)panel_.flush();
+        delayMs(45);
+        panel_.drawFrame(dark);
+        (void)panel_.flush();
+        delayMs(60);
+    }
+    panel_.drawFrame(light);
+    (void)panel_.flush();
     xSemaphoreGive(mutex_);
 }
 

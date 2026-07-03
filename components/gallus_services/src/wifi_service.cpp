@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "esp_mac.h"
+#include "esp_netif_ip_addr.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "lwip/sockets.h"
@@ -20,8 +21,8 @@ constexpr const char* kTag = "WiFi";
 constexpr uint32_t kDnsStackBytes = 3072;
 constexpr UBaseType_t kDnsTaskPriority = 4;
 
-// SoftAP addressing (esp_netif AP default).
-constexpr uint8_t kApAddr[4] = {192, 168, 4, 1};
+// SoftAP / provisioning subnet (matches other Gallus apps).
+constexpr uint8_t kApAddr[4] = {192, 168, 42, 1};
 
 constexpr const char* kPortalHtml =
     "<!doctype html><html><head>"
@@ -80,6 +81,22 @@ void urlDecode(char* text) {
 }
 
 void restartLater(void* /*ctx*/) { esp_restart(); }
+
+bool parseIp4(const char* text, esp_ip4_addr_t* out) {
+    unsigned a = 0;
+    unsigned b = 0;
+    unsigned c = 0;
+    unsigned d = 0;
+    if (sscanf(text, "%u.%u.%u.%u", &a, &b, &c, &d) != 4) {
+        return false;
+    }
+    if (a > 255 || b > 255 || c > 255 || d > 255) {
+        return false;
+    }
+    out->addr = ESP_IP4TOADDR(static_cast<uint8_t>(a), static_cast<uint8_t>(b),
+                              static_cast<uint8_t>(c), static_cast<uint8_t>(d));
+    return true;
+}
 
 }  // namespace
 
@@ -148,6 +165,51 @@ Status WifiService::start() {
     return startSta(ssid, password);
 }
 
+void WifiService::applyStaticIp() {
+    if (!config_.getBool("network", "use_static_ip", true)) {
+        return;
+    }
+
+    char ip_str[16] = {};
+    char gw_str[16] = {};
+    char mask_str[16] = {};
+    (void)config_.getString("network", "ip", ip_str, sizeof(ip_str),
+                            "192.168.42.42");
+    (void)config_.getString("network", "gateway", gw_str, sizeof(gw_str),
+                            "192.168.42.1");
+    (void)config_.getString("network", "netmask", mask_str, sizeof(mask_str),
+                            "255.255.255.0");
+
+    esp_netif_ip_info_t info = {};
+    if (!parseIp4(ip_str, &info.ip) || !parseIp4(gw_str, &info.gw) ||
+        !parseIp4(mask_str, &info.netmask)) {
+        Log::warn(kTag, "invalid static IP config — using DHCP");
+        return;
+    }
+
+    (void)esp_netif_dhcpc_stop(sta_netif_);
+    if (esp_netif_set_ip_info(sta_netif_, &info) != ESP_OK) {
+        Log::warn(kTag, "failed to apply static IP");
+        return;
+    }
+    Log::info(kTag, "static IP " IPSTR, IP2STR(&info.ip));
+}
+
+void WifiService::configureApNetif() {
+    if (ap_netif_ == nullptr) {
+        return;
+    }
+
+    esp_netif_ip_info_t info = {};
+    info.ip.addr = ESP_IP4TOADDR(kApAddr[0], kApAddr[1], kApAddr[2], kApAddr[3]);
+    info.gw.addr = ESP_IP4TOADDR(kApAddr[0], kApAddr[1], kApAddr[2], kApAddr[3]);
+    info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0);
+
+    (void)esp_netif_dhcps_stop(ap_netif_);
+    (void)esp_netif_set_ip_info(ap_netif_, &info);
+    (void)esp_netif_dhcps_start(ap_netif_);
+}
+
 Status WifiService::startSta(const char* ssid, const char* password) {
     wifi_config_t sta_cfg = {};
     snprintf(reinterpret_cast<char*>(sta_cfg.sta.ssid),
@@ -157,6 +219,7 @@ Status WifiService::startSta(const char* ssid, const char* password) {
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_cfg));
+    applyStaticIp();
 
     const esp_err_t err = esp_wifi_start();
     if (err != ESP_OK) {
@@ -246,6 +309,7 @@ Status WifiService::startProvisioning() {
     if (ap_netif_ == nullptr) {
         ap_netif_ = esp_netif_create_default_wifi_ap();
     }
+    configureApNetif();
 
     // Use the STA MAC so the AP name matches the mDNS hostname
     // (the SoftAP MAC is the STA MAC + 1).

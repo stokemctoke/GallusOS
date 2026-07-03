@@ -1,6 +1,7 @@
 # Gzip the dashboard at configure time and embed it in the firmware.
 set(WEBUI_SRC "${CMAKE_CURRENT_LIST_DIR}/../../web/dashboard/index.html")
 set(WEBUI_GZ "${CMAKE_CURRENT_BINARY_DIR}/index.html.gz")
+set(FAVICON_SRC "${CMAKE_CURRENT_LIST_DIR}/../../web/dashboard/favicon.png")
 if(EXISTS "${WEBUI_SRC}")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
                  "${WEBUI_SRC}")
@@ -14,6 +15,9 @@ if(EXISTS "${WEBUI_SRC}")
     endif()
 else()
     message(FATAL_ERROR "dashboard source missing: ${WEBUI_SRC}")
+endif()
+if(NOT EXISTS "${FAVICON_SRC}")
+    message(FATAL_ERROR "favicon missing: ${FAVICON_SRC}")
 endif()
 
 idf_component_register(
@@ -33,5 +37,5 @@ idf_component_register(
     INCLUDE_DIRS include
     REQUIRES gallus_kernel gallus_drivers gallus_hal esp_http_server esp_netif esp_event
     PRIV_REQUIRES json esp_wifi nvs_flash lwip app_update
-    EMBED_FILES "${WEBUI_GZ}"
+    EMBED_FILES "${WEBUI_GZ}" "${FAVICON_SRC}"
 )

@@ -44,6 +44,7 @@ private:
     struct WsSend;
 
     static esp_err_t pageHandler(httpd_req_t* req);
+    static esp_err_t faviconHandler(httpd_req_t* req);
     static esp_err_t wsHandler(httpd_req_t* req);
     static void onEvent(const Event& event, void* ctx);
     static void wsSendWorker(void* arg);

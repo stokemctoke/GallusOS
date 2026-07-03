@@ -58,6 +58,7 @@ private:
 
     static void onEvent(const Event& event, void* ctx);
     void flickerTo(const uint8_t* frame, int flashes);
+    void flickerPair(const uint8_t* light, const uint8_t* dark, int flashes);
     void renderStatus();
     void drawText(int x, int y, const char* text, bool on = true);
 

@@ -166,7 +166,8 @@ Status WifiService::start() {
 }
 
 void WifiService::applyStaticIp() {
-    if (!config_.getBool("network", "use_static_ip", true)) {
+    if (!config_.getBool("network", "use_static_ip", false)) {
+        Log::info(kTag, "using DHCP");
         return;
     }
 

@@ -25,6 +25,10 @@
 /// answers every query with 192.168.42.1 plus a credentials form
 /// served through RestService. Saving the form persists the
 /// credentials and reboots into the normal path.
+///
+/// STA mode uses DHCP by default. Set network/use_static_ip to true
+/// (with network/ip, gateway, netmask) for the Gallus 192.168.42.x
+/// subnet; static addressing on a foreign LAN will break connectivity.
 
 namespace gallus::services {
 

@@ -173,10 +173,10 @@ void DisplayService::renderStatus() {
 
     char line[40];
     if (status_.wifi_connected) {
-        snprintf(line, sizeof(line), "WiFi %u.%u.%u.%u", status_.ip[0],
+        snprintf(line, sizeof(line), "IP %u.%u.%u.%u", status_.ip[0],
                  status_.ip[1], status_.ip[2], status_.ip[3]);
     } else {
-        snprintf(line, sizeof(line), "WiFi: connecting");
+        snprintf(line, sizeof(line), "WiFi: connecting...");
     }
     drawText(0, 16, line);
 

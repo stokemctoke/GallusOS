@@ -1,5 +1,5 @@
 ====================================================
-GALLUSOS — MASTER DEVELOPMENT SPECIFICATION
+GALLUS OS — MASTER DEVELOPMENT SPECIFICATION
 ====================================================
 Revision 2 — supersedes the original prompt.
 This is the single authoritative document for GallusOS.

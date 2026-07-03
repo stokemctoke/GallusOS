@@ -1,7 +1,8 @@
 # Gzip the dashboard at configure time and embed it in the firmware.
 set(WEBUI_SRC "${CMAKE_CURRENT_LIST_DIR}/../../web/dashboard/index.html")
 set(WEBUI_GZ "${CMAKE_CURRENT_BINARY_DIR}/index.html.gz")
-set(FAVICON_SRC "${CMAKE_CURRENT_LIST_DIR}/../../web/dashboard/favicon.png")
+set(FAVICON_PNG "${CMAKE_CURRENT_LIST_DIR}/../../web/dashboard/favicon.png")
+set(FAVICON_ICO "${CMAKE_CURRENT_LIST_DIR}/../../web/dashboard/favicon.ico")
 if(EXISTS "${WEBUI_SRC}")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
                  "${WEBUI_SRC}")
@@ -16,8 +17,11 @@ if(EXISTS "${WEBUI_SRC}")
 else()
     message(FATAL_ERROR "dashboard source missing: ${WEBUI_SRC}")
 endif()
-if(NOT EXISTS "${FAVICON_SRC}")
-    message(FATAL_ERROR "favicon missing: ${FAVICON_SRC}")
+if(NOT EXISTS "${FAVICON_PNG}")
+    message(FATAL_ERROR "favicon missing: ${FAVICON_PNG}")
+endif()
+if(NOT EXISTS "${FAVICON_ICO}")
+    message(FATAL_ERROR "favicon missing: ${FAVICON_ICO}")
 endif()
 
 idf_component_register(
@@ -37,5 +41,5 @@ idf_component_register(
     INCLUDE_DIRS include
     REQUIRES gallus_kernel gallus_drivers gallus_hal esp_http_server esp_netif esp_event
     PRIV_REQUIRES json esp_wifi nvs_flash lwip app_update
-    EMBED_FILES "${WEBUI_GZ}" "${FAVICON_SRC}"
+    EMBED_FILES "${WEBUI_GZ}" "${FAVICON_PNG}" "${FAVICON_ICO}"
 )

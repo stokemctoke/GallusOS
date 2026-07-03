@@ -12,8 +12,10 @@
 /// Embedded gzipped dashboard (see gallus_services CMakeLists.txt).
 extern const uint8_t kDashboardStart[] asm("_binary_index_html_gz_start");
 extern const uint8_t kDashboardEnd[] asm("_binary_index_html_gz_end");
-extern const uint8_t kFaviconStart[] asm("_binary_favicon_png_start");
-extern const uint8_t kFaviconEnd[] asm("_binary_favicon_png_end");
+extern const uint8_t kFaviconPngStart[] asm("_binary_favicon_png_start");
+extern const uint8_t kFaviconPngEnd[] asm("_binary_favicon_png_end");
+extern const uint8_t kFaviconIcoStart[] asm("_binary_favicon_ico_start");
+extern const uint8_t kFaviconIcoEnd[] asm("_binary_favicon_ico_end");
 
 namespace gallus::services {
 
@@ -91,11 +93,19 @@ esp_err_t WebUiService::pageHandler(httpd_req_t* req) {
 }
 
 esp_err_t WebUiService::faviconHandler(httpd_req_t* req) {
-    const size_t len = kFaviconEnd - kFaviconStart;
-    httpd_resp_set_type(req, "image/png");
+    const uint8_t* data = kFaviconIcoStart;
+    size_t len = kFaviconIcoEnd - kFaviconIcoStart;
+    const char* type = "image/x-icon";
+
+    if (strcmp(req->uri, "/favicon.png") == 0) {
+        data = kFaviconPngStart;
+        len = kFaviconPngEnd - kFaviconPngStart;
+        type = "image/png";
+    }
+
+    httpd_resp_set_type(req, type);
     httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=86400");
-    return httpd_resp_send(req, reinterpret_cast<const char*>(kFaviconStart),
-                           len);
+    return httpd_resp_send(req, reinterpret_cast<const char*>(data), len);
 }
 
 esp_err_t WebUiService::wsHandler(httpd_req_t* req) {

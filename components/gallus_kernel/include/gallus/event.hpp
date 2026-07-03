@@ -35,6 +35,7 @@ enum class EventId : uint16_t {
     DisplayUpdated,
     TimeSynced,
     Heartbeat,
+    PowerModeChanged,
 
     /// First ID available for module-defined events.
     UserBase = 0x1000,

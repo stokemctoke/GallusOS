@@ -20,6 +20,7 @@
 #include "gallus/services/i2c_service.hpp"
 #include "gallus/services/network_service.hpp"
 #include "gallus/services/ota_service.hpp"
+#include "gallus/services/power_mode_service.hpp"
 #include "gallus/services/rest_service.hpp"
 #include "gallus/services/storage_service.hpp"
 #include "gallus/services/time_service.hpp"
@@ -47,6 +48,20 @@ void check(const char* what, gallus::Status status) {
 }
 
 }  // namespace
+
+struct ModuleHookCtx {
+    gallus::sdk::ModuleManager* modules = nullptr;
+};
+
+static gallus::Status stopModulesHook(void* ctx) {
+    auto* hook = static_cast<ModuleHookCtx*>(ctx);
+    return hook->modules->stopAll();
+}
+
+static gallus::Status startModulesHook(void* ctx) {
+    auto* hook = static_cast<ModuleHookCtx*>(ctx);
+    return hook->modules->startAll();
+}
 
 extern "C" void app_main(void) {
     banner();
@@ -79,6 +94,8 @@ extern "C" void app_main(void) {
     static gallus::services::OtaService ota(kernel.events(), rest);
     static gallus::services::WebUiService webui(kernel.events(), rest);
     static gallus::services::DiagnosticsService diagnostics(kernel, storage);
+    static gallus::services::PowerModeService power_mode(
+        kernel.events(), wifi, battery, display);
 
     check("storage init", storage.init());
     check("config init", config.init());
@@ -111,11 +128,20 @@ extern "C" void app_main(void) {
         kernel.events(), kernel.scheduler(), config, storage, gpio, rest, i2c,
     };
     static gallus::sdk::ModuleManager modules(module_ctx);
+    static ModuleHookCtx module_hooks = {.modules = &modules};
     check("modules init", modules.initAll());
+
+    power_mode.setModuleHooks({
+        .stop_all = &stopModulesHook,
+        .start_all = &startModulesHook,
+        .ctx = &module_hooks,
+    });
+    check("power mode init", power_mode.init());
 
     static gallus::app::ApiContext api_ctx = {&rest,    &config, &diagnostics,
                                               &gpio,    &storage, &i2c,
-                                              &modules, &battery, &kernel};
+                                              &modules, &battery, &power_mode,
+                                              &kernel};
     check("api routes", gallus::app::registerApiRoutes(api_ctx));
 
     check("ota init", ota.init());
@@ -124,6 +150,7 @@ extern "C" void app_main(void) {
 
     check("wifi start", wifi.start());
     check("modules start", modules.startAll());
+    check("power mode start", power_mode.start());
 
     // Switch the OLED from splash to the live status screen, then
     // start battery sampling (its first reading updates the screen).

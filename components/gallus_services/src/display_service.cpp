@@ -154,6 +154,10 @@ void DisplayService::onEvent(const Event& event, void* ctx) {
             break;
         case EventId::BatteryChanged:
             if (const auto* p = event.as<BatteryPayload>()) {
+                if (self->status_.battery_valid) {
+                    self->status_.prev_mv = self->status_.battery_mv;
+                }
+                self->status_.battery_mv = p->millivolts;
                 self->status_.battery_pct = p->percent;
                 self->status_.battery_valid = true;
             }
@@ -167,7 +171,23 @@ void DisplayService::onEvent(const Event& event, void* ctx) {
         default:
             return;
     }
-    self->renderStatus();
+    if (self->charge_mode_) {
+        self->renderChargeScreen();
+    } else {
+        self->renderStatus();
+    }
+}
+
+void DisplayService::setChargeMode(bool enabled) {
+    charge_mode_ = enabled;
+    if (!status_active_) {
+        return;
+    }
+    if (charge_mode_) {
+        renderChargeScreen();
+    } else {
+        renderStatus();
+    }
 }
 
 void DisplayService::renderStatus() {
@@ -211,6 +231,48 @@ void DisplayService::renderStatus() {
     xSemaphoreGive(mutex_);
 }
 
+void DisplayService::renderChargeScreen() {
+    if (!status_active_ || !present_) {
+        return;
+    }
+
+    xSemaphoreTake(mutex_, portMAX_DELAY);
+    panel_.clear();
+
+    drawTextCentered(0, "CHARGE");
+    for (int x = 0; x < drivers::Ssd1306::kWidth; ++x) {
+        panel_.drawPixel(x, 10, true);
+    }
+
+    char line[24];
+    if (status_.battery_valid) {
+        snprintf(line, sizeof(line), "%u%%", status_.battery_pct);
+        drawTextCentered(22, line);
+
+        snprintf(line, sizeof(line), "%u.%02uV",
+                 status_.battery_mv / 1000,
+                 (status_.battery_mv % 1000) / 10);
+        drawTextCentered(36, line);
+
+        const uint16_t mv = status_.battery_mv;
+        if (status_.battery_pct >= 99) {
+            drawTextCentered(50, "full");
+        } else if (mv >= 4050) {
+            drawTextCentered(50, "topping up");
+        } else if (status_.battery_valid && mv > status_.prev_mv + 15) {
+            drawTextCentered(50, "charging");
+        } else {
+            drawTextCentered(50, "on power");
+        }
+    } else {
+        drawTextCentered(28, "--%");
+        drawTextCentered(50, "charging");
+    }
+
+    (void)panel_.flush();
+    xSemaphoreGive(mutex_);
+}
+
 void DisplayService::drawText(int x, int y, const char* text, bool on) {
     for (const char* c = text; *c != '\0'; ++c) {
         const int ch = static_cast<unsigned char>(*c);
@@ -230,6 +292,23 @@ void DisplayService::drawText(int x, int y, const char* text, bool on) {
         }
         x += drivers::kFontWidth + 1;
     }
+}
+
+void DisplayService::drawTextCentered(int y, const char* text, bool on) {
+    if (text == nullptr) {
+        return;
+    }
+    size_t chars = 0;
+    for (const char* c = text; *c != '\0'; ++c) {
+        ++chars;
+    }
+    const int width =
+        static_cast<int>(chars) * (drivers::kFontWidth + 1) - 1;
+    int x = (drivers::Ssd1306::kWidth - width) / 2;
+    if (x < 0) {
+        x = 0;
+    }
+    drawText(x, y, text, on);
 }
 
 }  // namespace gallus::services

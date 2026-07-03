@@ -165,6 +165,46 @@ Status WifiService::start() {
     return startSta(ssid, password);
 }
 
+Status WifiService::stopRadio() {
+    if (!initialized_) {
+        return Error::InvalidState;
+    }
+    if (provisioning_) {
+        return Error::InvalidState;
+    }
+
+    radio_stopped_ = true;
+    const esp_err_t err = esp_wifi_stop();
+    if (err != ESP_OK) {
+        return fromEspErr(err);
+    }
+    (void)events_.publish(Event::make(EventId::WiFiDisconnected));
+    Log::info(kTag, "radio stopped");
+    return Status::success();
+}
+
+Status WifiService::resumeSta() {
+    if (!initialized_) {
+        return Error::InvalidState;
+    }
+    if (provisioning_) {
+        return Error::InvalidState;
+    }
+
+    char ssid[33] = {};
+    char password[65] = {};
+    (void)config_.getString("wifi", "ssid", ssid, sizeof(ssid), "");
+    (void)config_.getString("wifi", "password", password, sizeof(password),
+                            "");
+    if (ssid[0] == '\0') {
+        return Error::InvalidState;
+    }
+
+    retry_count_ = 0;
+    radio_stopped_ = false;
+    return startSta(ssid, password);
+}
+
 void WifiService::applyStaticIp() {
     if (!config_.getBool("network", "use_static_ip", false)) {
         Log::info(kTag, "using DHCP");
@@ -242,7 +282,7 @@ void WifiService::wifiEventHandler(void* arg, esp_event_base_t /*base*/,
         case WIFI_EVENT_STA_DISCONNECTED:
             (void)self->events_.publish(
                 Event::make(EventId::WiFiDisconnected));
-            if (self->provisioning_) {
+            if (self->provisioning_ || self->radio_stopped_) {
                 break;
             }
             if (self->retry_count_ < kMaxRetries) {

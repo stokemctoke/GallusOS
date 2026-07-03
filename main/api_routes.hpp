@@ -5,6 +5,7 @@
 #include "gallus/services/battery_service.hpp"
 #include "gallus/services/config_service.hpp"
 #include "gallus/services/diagnostics_service.hpp"
+#include "gallus/services/power_mode_service.hpp"
 #include "gallus/services/gpio_service.hpp"
 #include "gallus/services/i2c_service.hpp"
 #include "gallus/services/rest_service.hpp"
@@ -24,6 +25,7 @@ struct ApiContext {
     services::I2cService* i2c;
     sdk::ModuleManager* modules;
     services::BatteryService* battery;
+    services::PowerModeService* power;
     Kernel* kernel;
 };
 

@@ -32,6 +32,7 @@ const char* toString(EventId id) {
         case EventId::DisplayUpdated:     return "DisplayUpdated";
         case EventId::TimeSynced:         return "TimeSynced";
         case EventId::Heartbeat:          return "Heartbeat";
+        case EventId::PowerModeChanged:   return "PowerModeChanged";
         default:                          return "User";
     }
 }

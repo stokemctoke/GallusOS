@@ -74,6 +74,9 @@ esp_err_t systemHandler(httpd_req_t* req) {
     char hostname[32] = {};
     fillHostname(ctx->config, hostname, sizeof(hostname));
     cJSON_AddStringToObject(doc, "hostname", hostname);
+    if (ctx->power != nullptr) {
+        cJSON_AddBoolToObject(doc, "charge_mode", ctx->power->chargeMode());
+    }
     return sendJson(req, doc);
 }
 
@@ -328,6 +331,49 @@ esp_err_t resetHandler(httpd_req_t* req) {
     return err;
 }
 
+esp_err_t chargeModeHandler(httpd_req_t* req) {
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (!ctx->rest->authorize(req)) {
+        return ESP_OK;
+    }
+    if (ctx->power == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "power service unavailable");
+    }
+
+    bool enable = true;
+    if (req->content_len > 0) {
+        char body[64] = {};
+        const int received =
+            httpd_req_recv(req, body, sizeof(body) - 1);
+        if (received > 0) {
+            body[received] = '\0';
+            cJSON* doc = cJSON_Parse(body);
+            if (doc != nullptr) {
+                const cJSON* item =
+                    cJSON_GetObjectItemCaseSensitive(doc, "enable");
+                if (cJSON_IsBool(item)) {
+                    enable = cJSON_IsTrue(item);
+                }
+                cJSON_Delete(doc);
+            }
+        }
+    }
+
+    const Status status =
+        enable ? ctx->power->enterChargeMode()
+               : ctx->power->exitChargeMode();
+    if (!status.ok()) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                   status.message());
+    }
+
+    cJSON* out = cJSON_CreateObject();
+    cJSON_AddBoolToObject(out, "ok", true);
+    cJSON_AddBoolToObject(out, "charge_mode", enable);
+    return sendJson(req, out);
+}
+
 esp_err_t filesListHandler(httpd_req_t* req) {
     auto* ctx = static_cast<ApiContext*>(req->user_ctx);
     if (!ctx->rest->authorize(req)) {
@@ -439,6 +485,7 @@ esp_err_t endpointsHandler(httpd_req_t* req) {
         {"PUT", "/api/v1/config", "Update config namespace values"},
         {"POST", "/api/v1/system/reboot", "Reboot the device"},
         {"POST", "/api/v1/system/reset", "Erase saved settings and reboot"},
+        {"POST", "/api/v1/system/charge-mode", "Enter or exit charge mode"},
         {"GET", "/api/v1/endpoints", "This list"},
         {"POST", "/api/v1/ota/upload", "Upload firmware binary"},
     };
@@ -512,6 +559,11 @@ Status registerApiRoutes(ApiContext& ctx) {
     }
     status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/system/reset",
                                      &resetHandler, &ctx);
+    if (!status.ok()) {
+        return status;
+    }
+    status = ctx.rest->registerRoute(HTTP_POST, "/api/v1/system/charge-mode",
+                                     &chargeModeHandler, &ctx);
     if (!status.ok()) {
         return status;
     }

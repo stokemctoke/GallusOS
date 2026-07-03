@@ -52,6 +52,12 @@ public:
     /// Connect as STA, or enter provisioning when unconfigured.
     Status start();
 
+    /// Stop the radio to save power (charge mode). Publishes WiFiDisconnected.
+    Status stopRadio();
+
+    /// Reconnect STA using saved credentials after stopRadio().
+    Status resumeSta();
+
     [[nodiscard]] bool provisioning() const { return provisioning_; }
 
 private:
@@ -82,6 +88,7 @@ private:
     int dns_sock_ = -1;
     int retry_count_ = 0;
     bool provisioning_ = false;
+    bool radio_stopped_ = false;
     bool initialized_ = false;
 };
 

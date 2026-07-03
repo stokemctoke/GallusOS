@@ -148,6 +148,7 @@ logged at startup.
 | `PUT` | `/api/v1/config` | Update config values (`{"namespace","values"}`) |
 | `POST` | `/api/v1/system/reboot` | Reboot the device |
 | `POST` | `/api/v1/system/reset` | Erase saved settings and reboot |
+| `POST` | `/api/v1/system/charge-mode` | Enter/exit charge mode (`{"enable":true}`) |
 | `GET` | `/api/v1/endpoints` | Catalogue of built-in API routes |
 | `POST` | `/api/v1/ota/upload` | Raw firmware binary (same file as `build/gallus_os.bin`) |
 
@@ -293,7 +294,7 @@ tools/.venv/bin/python tools/gallus_image_gen.py \
 | 4 | Module codegen, example modules | Done |
 | 5 | Display, battery, OTA, web dashboard | Done |
 | 6 | SDK CLI, diagnostics UI, REST explorer, filesystem browser, host tests, CI | Done |
-| 7 | Config REST API, Settings tab, DiagnosticsService, live log stream, SDK scaffolds | In progress |
+| 7 | Config REST API, Settings tab, DiagnosticsService, live log stream, charge mode | In progress |
 
 | Version | Value |
 |---|---|
@@ -315,7 +316,8 @@ Phase 7 work is on branch **`stage-7`**.
 
 - **`DiagnosticsService`** — heap, scheduler, event-bus and task snapshots for REST
 - **REST:** `GET/PUT /api/v1/config` — read/write config namespaces (secrets redacted)
-- **Dashboard:** Settings tab (API token, reboot, factory reset), live serial log stream on Diagnostics
+- **Dashboard:** Settings tab (API token, reboot, factory reset, charge mode), live serial log stream on Diagnostics
+- **Charge mode:** Boot long-press (2 s) or API — WiFi/modules off, OLED charge screen; short Boot press to exit
 - **SDK CLI:** `create-service`, `create-driver` scaffolds
 
 ---

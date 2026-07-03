@@ -44,6 +44,11 @@ public:
     /// Subscribe to framework events and start the status screen.
     Status start();
 
+    /// Switch between normal status and minimal charge display.
+    void setChargeMode(bool enabled);
+
+    [[nodiscard]] bool chargeMode() const { return charge_mode_; }
+
     [[nodiscard]] bool present() const { return present_; }
 
 private:
@@ -53,6 +58,8 @@ private:
         bool wifi_connected = false;
         uint8_t ip[4] = {};
         char hostname[24] = {};
+        uint16_t prev_mv = 0;
+        uint16_t battery_mv = 0;
         uint8_t battery_pct = 0;
         bool battery_valid = false;
         char module[24] = {};
@@ -62,8 +69,10 @@ private:
     void flickerTo(const uint8_t* frame, int flashes);
     void flickerPair(const uint8_t* light, const uint8_t* dark, int flashes);
     void renderStatus();
+    void renderChargeScreen();
     void updateHostname();
     void drawText(int x, int y, const char* text, bool on = true);
+    void drawTextCentered(int y, const char* text, bool on = true);
 
     EventBus& events_;
     I2cService& i2c_;
@@ -73,6 +82,7 @@ private:
     SemaphoreHandle_t mutex_ = nullptr;
     bool present_ = false;
     bool status_active_ = false;
+    bool charge_mode_ = false;
 };
 
 }  // namespace gallus::services

@@ -47,10 +47,26 @@ Status BatteryService::start(uint32_t interval_ms) {
     if (!initialized_) {
         return Error::InvalidState;
     }
-    sample();  // immediate first reading
+    sample();
+    return setSampleInterval(interval_ms);
+}
+
+Status BatteryService::setSampleInterval(uint32_t interval_ms) {
+    if (!initialized_) {
+        return Error::InvalidState;
+    }
+    if (sample_job_.valid()) {
+        (void)scheduler_.cancel(sample_job_);
+        sample_job_ = {};
+    }
     auto job = scheduler_.every(interval_ms, &BatteryService::sampleJob, this,
                                 Priority::Background);
-    return job.status();
+    if (!job.ok()) {
+        return job.status();
+    }
+    sample_job_ = job.value();
+    sampling_ = true;
+    return Status::success();
 }
 
 void BatteryService::sampleJob(void* ctx) {

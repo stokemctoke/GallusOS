@@ -50,6 +50,9 @@ public:
     /// Take one reading now and schedule periodic sampling.
     Status start(uint32_t interval_ms = 30000);
 
+    /// Change the sampling interval (cancels the previous periodic job).
+    Status setSampleInterval(uint32_t interval_ms);
+
     /// Last reading in millivolts (battery terminal, post-divider math).
     [[nodiscard]] uint16_t millivolts() const { return last_mv_; }
     [[nodiscard]] uint8_t percent() const { return last_pct_; }
@@ -66,7 +69,9 @@ private:
     int enable_pin_;
     uint16_t last_mv_ = 0;
     uint8_t last_pct_ = 0;
+    JobHandle sample_job_ = {};
     bool initialized_ = false;
+    bool sampling_ = false;
 };
 
 }  // namespace gallus::services

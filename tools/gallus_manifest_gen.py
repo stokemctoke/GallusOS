@@ -47,6 +47,10 @@ OPTIONAL_FIELDS = {
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
+# Runtime buffers assume this bound: ModuleEventPayload.name and the
+# module lifecycle REST route parser both use char[24].
+MAX_NAME_LEN = 23
+
 
 def fail(message: str) -> None:
     print(f"manifest error: {message}", file=sys.stderr)
@@ -71,6 +75,9 @@ def validate(manifest: dict, component_name: str) -> None:
     name = manifest["name"]
     if not NAME_RE.match(name):
         fail(f"name '{name}' must be lower_snake_case")
+    if len(name) > MAX_NAME_LEN:
+        fail(f"name '{name}' is {len(name)} chars — max {MAX_NAME_LEN} "
+             "(runtime event payloads and REST routes use char[24])")
     if name != component_name:
         fail(f"name '{name}' must match its directory '{component_name}'")
     if not VERSION_RE.match(manifest["version"]):

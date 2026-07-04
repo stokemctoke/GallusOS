@@ -69,7 +69,8 @@ Required fields: `name`, `version`, `description`, `author`, `license`, `categor
 Optional: `menu_icon`, `required_services`, `required_gpio`, `events_published`,
 `events_consumed`, `capabilities`, `config_schema`.
 
-- `name` — lower_snake_case, must match directory name.
+- `name` — lower_snake_case, must match directory name, max 23 chars
+  (runtime event payloads and REST routes use `char[24]`).
 - `version` — semver `x.y.z` (independent of firmware version).
 - `category` — one of the values validated by `tools/gallus_manifest_gen.py`.
 - `required_services` — metadata for tooling/docs; not enforced at runtime in v1.

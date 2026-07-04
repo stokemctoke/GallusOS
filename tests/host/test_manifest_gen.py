@@ -68,3 +68,29 @@ def test_rejects_bad_module_name() -> None:
     finally:
         bad.unlink(missing_ok=True)
         out.unlink(missing_ok=True)
+
+
+def test_rejects_overlong_module_name() -> None:
+    name = "a" * 24  # one over the 23-char runtime limit
+    bad = ROOT / "tests" / "host" / "_long_manifest.json"
+    bad.write_text(
+        json.dumps(
+            {
+                "name": name,
+                "version": "0.1.0",
+                "description": "too long",
+                "author": "test",
+                "license": "PolyForm-Perimeter-1.0.0",
+                "category": "Examples",
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = ROOT / "tests" / "host" / "_long.gen.cpp"
+    result = run_manifest_gen(bad, name, out)
+    try:
+        assert result.returncode != 0
+        assert "max 23" in (result.stderr or "")
+    finally:
+        bad.unlink(missing_ok=True)
+        out.unlink(missing_ok=True)

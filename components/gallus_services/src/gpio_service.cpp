@@ -1,6 +1,7 @@
 #include "gallus/services/gpio_service.hpp"
 
 #include <cstdio>
+#include <cstring>
 
 #include "gallus/hal/board.hpp"
 #include "gallus/log.hpp"
@@ -114,6 +115,15 @@ Status GpioService::releasePin(int pin, const char* owner) {
         entry.state != PinState::Reserved) {
         xSemaphoreGive(mutex_);
         return Error::NotFound;
+    }
+
+    // Only the holder may release (owner is stored truncated to
+    // kOwnerLen, so compare what was actually stored).
+    if (strncmp(entry.owner, owner, kOwnerLen - 1) != 0) {
+        xSemaphoreGive(mutex_);
+        Log::warn(kTag, "pin %d release denied for '%s' (held by '%s')",
+                  pin, owner, entry.owner);
+        return Error::PermissionDenied;
     }
 
     entry.state = PinState::Free;

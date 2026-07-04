@@ -65,6 +65,8 @@ public:
     Status claim(int pin, const char* owner, bool force = false);
 
     /// Release a pin held by @p owner and reset it to power-on state.
+    /// Fails with PermissionDenied when @p owner does not match the
+    /// holder recorded at allocation time.
     Status releasePin(int pin, const char* owner);
 
     // Pin access — allowed only on allocated/reserved pins.

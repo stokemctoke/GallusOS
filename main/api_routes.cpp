@@ -31,6 +31,10 @@ void scheduleRestart() {
     xTaskCreate(&delayedRestart, "gallus_reboot", 2048, nullptr, 5, nullptr);
 }
 
+void enterChargeModeJob(void* ctx) {
+    (void)static_cast<services::PowerModeService*>(ctx)->enterChargeMode();
+}
+
 void fillHostname(const services::ConfigService* config, char* out,
                   size_t cap) {
     char fallback[32] = {};
@@ -510,18 +514,39 @@ esp_err_t chargeModeHandler(httpd_req_t* req) {
         }
     }
 
-    const Status status =
-        enable ? ctx->power->enterChargeMode()
-               : ctx->power->exitChargeMode();
-    if (!status.ok()) {
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
-                                   status.message());
+    if (!enable) {
+        // Exiting is safe to run inline: the radio comes back up, it
+        // does not go away under this response.
+        const Status status = ctx->power->exitChargeMode();
+        if (!status.ok()) {
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                       status.message());
+        }
+    } else {
+        // Entering stops the WiFi radio, which would kill this
+        // connection before the response leaves the device — validate
+        // now, reply, then switch from a scheduled job.
+        if (ctx->wifi != nullptr && ctx->wifi->provisioning()) {
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                       "unavailable during provisioning");
+        }
     }
 
     cJSON* out = cJSON_CreateObject();
     cJSON_AddBoolToObject(out, "ok", true);
     cJSON_AddBoolToObject(out, "charge_mode", enable);
-    return sendJson(req, out);
+    const esp_err_t err = sendJson(req, out);
+
+    if (enable) {
+        const auto job = ctx->kernel->scheduler().once(
+            750, &enterChargeModeJob, ctx->power, Priority::Normal);
+        if (!job.ok()) {
+            // Scheduler full — fall back to switching inline; the
+            // response has already been sent (best effort).
+            (void)ctx->power->enterChargeMode();
+        }
+    }
+    return err;
 }
 
 esp_err_t wifiReconnectHandler(httpd_req_t* req) {

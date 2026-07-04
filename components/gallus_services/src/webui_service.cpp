@@ -78,6 +78,10 @@ Status WebUiService::init() {
     if (mutex_ == nullptr) {
         return Error::NoMemory;
     }
+    log_mutex_ = xSemaphoreCreateMutex();
+    if (log_mutex_ == nullptr) {
+        return Error::NoMemory;
+    }
 
     GALLUS_RETURN_IF_ERROR(
         rest_.registerRoute(HTTP_GET, "/", &pageHandler, this));
@@ -266,18 +270,63 @@ void WebUiService::broadcast(const char* json) {
     xSemaphoreGive(mutex_);
 }
 
+/// Accumulate one esp_log write. Lines are only broadcast when the
+/// terminating newline arrives, so the dashboard gets one frame per
+/// log line instead of prefix/message/suffix fragments. ANSI colour
+/// sequences and control bytes are stripped — raw ESC bytes made the
+/// JSON frame unparseable in the browser.
 void WebUiService::pushLogLine(const char* line) {
+    if (log_mutex_ == nullptr) {
+        return;
+    }
+
+    char completed[sizeof(log_line_)];
+    bool have_line = false;
+
+    xSemaphoreTake(log_mutex_, portMAX_DELAY);
+    for (const char* p = line; *p != '\0'; ++p) {
+        const unsigned char c = static_cast<unsigned char>(*p);
+        if (c == 0x1B) {  // ANSI escape: skip "ESC [ ... final-byte"
+            if (p[1] == '[') {
+                p += 2;
+                while (*p != '\0' && (*p < '@' || *p > '~')) {
+                    ++p;
+                }
+                if (*p == '\0') {
+                    break;
+                }
+            }
+            continue;
+        }
+        if (c == '\n') {
+            if (log_len_ > 0 && !have_line) {
+                log_line_[log_len_] = '\0';
+                memcpy(completed, log_line_, log_len_ + 1);
+                have_line = true;
+            }
+            log_len_ = 0;
+            continue;
+        }
+        if (c < 0x20) {
+            continue;  // other control bytes have no place in JSON
+        }
+        if (log_len_ < sizeof(log_line_) - 1) {
+            log_line_[log_len_++] = static_cast<char>(c);
+        }
+    }
+    xSemaphoreGive(log_mutex_);
+
+    if (have_line) {
+        broadcastLogLine(completed);
+    }
+}
+
+void WebUiService::broadcastLogLine(const char* line) {
     char escaped[240] = {};
     size_t j = 0;
     for (const char* p = line; *p != '\0' && j + 2 < sizeof(escaped); ++p) {
         if (*p == '"' || *p == '\\') {
-            if (j + 1 >= sizeof(escaped)) {
-                break;
-            }
             escaped[j++] = '\\';
-        }
-        if (*p == '\n' || *p == '\r') {
-            continue;
         }
         escaped[j++] = *p;
     }

@@ -54,6 +54,7 @@ private:
     void removeClient(int fd);
     void broadcast(const char* json);
     void pushLogLine(const char* line);
+    void broadcastLogLine(const char* line);
 
     static int logVprintf(const char* fmt, va_list args);
 
@@ -65,6 +66,13 @@ private:
     int clients_[kMaxClients] = {};
     size_t client_count_ = 0;
     SemaphoreHandle_t mutex_ = nullptr;
+
+    // Log-line assembly: esp_log emits each line as several writes
+    // (prefix, message, color-reset+newline), so fragments accumulate
+    // here — guarded by its own mutex because broadcast() takes mutex_.
+    SemaphoreHandle_t log_mutex_ = nullptr;
+    char log_line_[240] = {};
+    size_t log_len_ = 0;
 };
 
 }  // namespace gallus::services

@@ -31,6 +31,9 @@ struct HostTask {
     std::thread worker;
 };
 
+/// The HostTask running on this thread (nullptr on non-task threads).
+thread_local HostTask* t_current_task = nullptr;
+
 HostQueue* asQueue(QueueHandle_t handle) {
     return static_cast<HostQueue*>(handle);
 }
@@ -173,11 +176,20 @@ BaseType_t xTaskCreate(TaskFunction_t fn, const char* /*name*/,
     auto* task = new HostTask();
     task->fn = fn;
     task->param = param;
-    task->worker = std::thread([task]() { task->fn(task->param); });
+    task->worker = std::thread([task]() {
+        t_current_task = task;
+        task->fn(task->param);
+    });
     task->worker.detach();
 
     if (out_handle != nullptr) {
         *out_handle = task;
     }
     return pdPASS;
+}
+
+TaskHandle_t xTaskGetCurrentTaskHandle() { return t_current_task; }
+
+void vTaskDelay(TickType_t ticks) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(ticks));
 }

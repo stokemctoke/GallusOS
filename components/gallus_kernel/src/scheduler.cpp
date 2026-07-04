@@ -146,9 +146,29 @@ Status Scheduler::cancel(JobHandle handle) {
         xSemaphoreGive(mutex_);
         return Error::NotFound;
     }
+    const uint8_t tier = static_cast<uint8_t>(job.priority);
     const esp_timer_handle_t timer = detachTimerLocked(job);
     xSemaphoreGive(mutex_);
     stopTimer(timer);
+
+    // Fence: wait for an in-flight execution of this job to return so
+    // the caller may free the job's ctx immediately after cancel().
+    // (A queued-but-not-started item is skipped by the worker's
+    // generation check.) Skip when called from the job's own tier
+    // worker — waiting on ourselves would deadlock.
+    if (xTaskGetCurrentTaskHandle() != tier_tasks_[tier]) {
+        for (;;) {
+            xSemaphoreTake(mutex_, portMAX_DELAY);
+            const bool running =
+                running_slot_[tier] == handle.slot &&
+                running_generation_[tier] == handle.generation;
+            xSemaphoreGive(mutex_);
+            if (!running) {
+                break;
+            }
+            vTaskDelay(1);
+        }
+    }
     return Status::success();
 }
 
@@ -235,18 +255,34 @@ void Scheduler::workerTaskEntry(void* arg) {
             continue;
         }
 
+        // Revalidate: the job may have been cancelled after this item
+        // was queued. Mark it running so cancel() can fence on us.
+        xSemaphoreTake(self->mutex_, portMAX_DELAY);
+        Job& job = self->jobs_[item.slot];
+        const bool stale =
+            !job.active || job.generation != item.generation;
+        if (!stale) {
+            self->running_slot_[ctx->tier] = item.slot;
+            self->running_generation_[ctx->tier] = item.generation;
+        }
+        xSemaphoreGive(self->mutex_);
+        if (stale) {
+            continue;
+        }
+
         item.fn(item.ctx);
 
+        esp_timer_handle_t timer = nullptr;
+        xSemaphoreTake(self->mutex_, portMAX_DELAY);
+        self->running_slot_[ctx->tier] = kNoSlot;
         if (item.release_after_run) {
-            esp_timer_handle_t timer = nullptr;
-            xSemaphoreTake(self->mutex_, portMAX_DELAY);
-            Job& job = self->jobs_[item.slot];
-            if (job.active && job.generation == item.generation) {
-                timer = self->detachTimerLocked(job);
+            Job& done = self->jobs_[item.slot];
+            if (done.active && done.generation == item.generation) {
+                timer = self->detachTimerLocked(done);
             }
-            xSemaphoreGive(self->mutex_);
-            stopTimer(timer);
         }
+        xSemaphoreGive(self->mutex_);
+        stopTimer(timer);
     }
 }
 

@@ -66,6 +66,9 @@ void ModuleManager::destroyInstance(Entry& entry) {
     if (entry.instance == nullptr) {
         return;
     }
+    // No route may survive the instance it points at (user_ctx would
+    // dangle). Idempotent: unregistering absent routes is a no-op.
+    entry.instance->unregisterRoutes(ctx_.rest);
     entry.instance->shutdown();
     delete entry.instance;
     entry.instance = nullptr;
@@ -129,6 +132,9 @@ Status ModuleManager::stopOne(Entry& entry) {
     if (entry.instance == nullptr) {
         return Error::InvalidState;
     }
+
+    // Remove routes first so no request reaches a stopping module.
+    entry.instance->unregisterRoutes(ctx_.rest);
 
     const Status status = entry.instance->stop();
     if (!status.ok()) {

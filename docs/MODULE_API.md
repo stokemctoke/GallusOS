@@ -31,6 +31,7 @@ jobs, and use services for all hardware access.
 | Stop | `stop()` | Cancel jobs, unsubscribe, release pins |
 | Shutdown | `shutdown()` | Final cleanup before restart |
 | Routes | `registerRoutes(RestService&)` | Optional REST under `/api/v1/modules/<name>/` |
+| Routes | `unregisterRoutes(RestService&)` | REQUIRED if `registerRoutes` is overridden — remove every route added; called on stop and before destruction |
 
 States tracked by `ModuleManager`: Registered → Initialized → Started → Stopped
 (or Disabled / Failed).

@@ -88,6 +88,14 @@ public:
         return Status::success();
     }
 
+    /// Undo registerRoutes(): remove every route this module added.
+    /// A module that overrides registerRoutes() MUST override this
+    /// too — the framework calls it on stop and before the instance
+    /// is destroyed, so no route may outlive the module.
+    virtual void unregisterRoutes(services::RestService& rest) {
+        (void)rest;
+    }
+
 protected:
     /// Valid after initialize().
     [[nodiscard]] ModuleContext& ctx() { return *ctx_; }

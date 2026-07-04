@@ -65,7 +65,11 @@ public:
                            Priority priority = Priority::Normal);
 
     /// Cancel a scheduled job. Safe with stale handles (NotFound).
-    /// A pending execution already queued to a worker may still run.
+    /// On return the job's callback is not running and will not run
+    /// again, so its ctx may be freed — unless cancel() is called from
+    /// the job's own tier worker (e.g. a job cancelling itself), where
+    /// waiting would deadlock and the caller must not free ctx that an
+    /// in-flight execution could still touch.
     Status cancel(JobHandle handle);
 
     /// Number of active jobs.
@@ -105,10 +109,15 @@ private:
         uint8_t tier = 0;
     };
 
+    /// Sentinel for running_slot_: no job executing on that tier.
+    static constexpr uint8_t kNoSlot = 0xFF;
+
     Job jobs_[kMaxJobs] = {};
     WorkerContext worker_ctx_[kTierCount] = {};
     QueueHandle_t tier_queues_[kTierCount] = {};
     TaskHandle_t tier_tasks_[kTierCount] = {};
+    uint8_t running_slot_[kTierCount] = {kNoSlot, kNoSlot, kNoSlot, kNoSlot};
+    uint16_t running_generation_[kTierCount] = {};
     SemaphoreHandle_t mutex_ = nullptr;
     bool initialized_ = false;
 };

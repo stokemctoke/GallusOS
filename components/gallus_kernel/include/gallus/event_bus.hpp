@@ -24,6 +24,12 @@
 ///    Scheduler.
 ///  - Subscription storage is static (kMaxSubscriptions), allocated at
 ///    init — no runtime heap churn.
+///  - Unsubscribe is NOT synchronized with delivery: the dispatcher
+///    snapshots handlers before invoking them, so one delivery may
+///    still occur after unsubscribe() returns. Do not free the ctx
+///    passed at subscribe time until that grace period has passed
+///    (in practice: unsubscribe from long-lived objects, or tolerate
+///    one late callback).
 
 namespace gallus {
 
@@ -67,6 +73,11 @@ public:
 
     /// Remove a previous subscription. Safe to call with a stale
     /// handle (returns NotFound).
+    ///
+    /// WARNING: a delivery already snapshotted by the dispatcher may
+    /// still invoke the handler ONCE after this returns — the handler
+    /// and its ctx must stay valid across that window (see the
+    /// delivery-model note at the top of this file).
     Status unsubscribe(SubscriptionHandle handle);
 
     /// Events dropped due to queue overflow since init.

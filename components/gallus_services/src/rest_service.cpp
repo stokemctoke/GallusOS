@@ -56,11 +56,16 @@ Status RestService::registerRoute(httpd_method_t method, const char* uri,
 
     const esp_err_t err = httpd_register_uri_handler(server_, &route);
     if (err != ESP_OK) {
-        Log::error(kTag, "route %s registration failed: %s", uri,
-                   esp_err_to_name(err));
+        Log::error(kTag, "route %s registration failed: %s (%u/%u slots used)",
+                   uri, esp_err_to_name(err),
+                   static_cast<unsigned>(routes_used_),
+                   static_cast<unsigned>(kMaxRoutes));
         return fromEspErr(err);
     }
-    Log::debug(kTag, "route registered: %s", uri);
+    ++routes_used_;
+    Log::debug(kTag, "route registered: %s (%u/%u)", uri,
+               static_cast<unsigned>(routes_used_),
+               static_cast<unsigned>(kMaxRoutes));
     return Status::success();
 }
 
@@ -82,10 +87,14 @@ Status RestService::registerWebSocket(const char* uri, Handler handler,
 
     const esp_err_t err = httpd_register_uri_handler(server_, &route);
     if (err != ESP_OK) {
-        Log::error(kTag, "websocket %s registration failed: %s", uri,
-                   esp_err_to_name(err));
+        Log::error(kTag,
+                   "websocket %s registration failed: %s (%u/%u slots used)",
+                   uri, esp_err_to_name(err),
+                   static_cast<unsigned>(routes_used_),
+                   static_cast<unsigned>(kMaxRoutes));
         return fromEspErr(err);
     }
+    ++routes_used_;
     Log::debug(kTag, "websocket registered: %s", uri);
     return Status::success();
 }
@@ -95,6 +104,9 @@ Status RestService::unregisterRoute(httpd_method_t method, const char* uri) {
         return Error::InvalidState;
     }
     const esp_err_t err = httpd_unregister_uri_handler(server_, uri, method);
+    if (err == ESP_OK && routes_used_ > 0) {
+        --routes_used_;
+    }
     return fromEspErr(err);
 }
 

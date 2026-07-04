@@ -115,8 +115,15 @@ Status ModuleManager::startOne(Entry& entry) {
 
     status = entry.instance->registerRoutes(ctx_.rest);
     if (!status.ok()) {
-        Log::warn(kTag, "%s — route registration failed: %s", entry.info->name,
-                  status.message());
+        // A module without its routes is broken, not degraded: unwind
+        // the start instead of running half-wired (a silent warning
+        // here just made features vanish when the route table filled).
+        Log::error(kTag, "%s — route registration failed: %s",
+                   entry.info->name, status.message());
+        entry.instance->unregisterRoutes(ctx_.rest);
+        (void)entry.instance->stop();
+        entry.state = State::Failed;
+        return status;
     }
 
     entry.state = State::Started;

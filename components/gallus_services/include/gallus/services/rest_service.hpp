@@ -25,7 +25,7 @@ class RestService {
 public:
     using Handler = esp_err_t (*)(httpd_req_t* req);
 
-    static constexpr size_t kMaxRoutes = 28;
+    static constexpr size_t kMaxRoutes = 40;
 
     explicit RestService(ConfigService& config) : config_(config) {}
     RestService(const RestService&) = delete;
@@ -61,6 +61,9 @@ public:
 
     [[nodiscard]] bool running() const { return server_ != nullptr; }
 
+    /// Routes currently registered (out of kMaxRoutes).
+    [[nodiscard]] size_t routesUsed() const { return routes_used_; }
+
     /// Underlying httpd handle (for WebSocket async sends). May be null.
     [[nodiscard]] httpd_handle_t server() const { return server_; }
 
@@ -69,6 +72,7 @@ private:
 
     ConfigService& config_;
     httpd_handle_t server_ = nullptr;
+    size_t routes_used_ = 0;
     char token_[64] = {};
 };
 

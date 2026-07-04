@@ -21,9 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The action renamed its inputs (esp-idf-version/target ->
+      # version); the old names were silently ignored and CI started
+      # installing the latest IDF instead of the pin.
       - uses: espressif/install-esp-idf-action@v1
         with:
-          esp-idf-version: v5.5.1
-          target: esp32c5
+          version: v5.5.1
       - name: Build firmware
         run: idf.py build

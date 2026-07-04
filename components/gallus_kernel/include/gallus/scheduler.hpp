@@ -80,7 +80,6 @@ private:
         esp_timer_handle_t timer = nullptr;
         JobFn fn = nullptr;
         void* ctx = nullptr;
-        Scheduler* owner = nullptr;
         uint16_t generation = 0;
         uint8_t slot = 0;
         Priority priority = Priority::Normal;
@@ -111,6 +110,10 @@ private:
 
     /// Sentinel for running_slot_: no job executing on that tier.
     static constexpr uint8_t kNoSlot = 0xFF;
+
+    /// The single scheduler instance (owned by the Kernel); lets the
+    /// esp_timer callback find its way back from a packed slot/gen arg.
+    static Scheduler* s_instance_;
 
     Job jobs_[kMaxJobs] = {};
     WorkerContext worker_ctx_[kTierCount] = {};

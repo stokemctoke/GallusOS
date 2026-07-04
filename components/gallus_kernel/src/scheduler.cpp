@@ -21,12 +21,27 @@ constexpr const char* kTierTaskName[Scheduler::kTierCount] = {
     "gallus_bg",
 };
 
+/// Pack a job identity into the esp_timer callback arg. The slot and
+/// generation are baked in at creation, so a callback that was already
+/// in flight when its job was cancelled (and the slot recycled) can be
+/// detected — the mutable Job struct alone cannot tell those apart.
+void* packTimerArg(uint8_t slot, uint16_t generation) {
+    return reinterpret_cast<void*>(static_cast<uintptr_t>(slot) |
+                                   (static_cast<uintptr_t>(generation) << 8));
+}
+
 }  // namespace
+
+Scheduler* Scheduler::s_instance_ = nullptr;
 
 Status Scheduler::init() {
     if (initialized_) {
         return Error::InvalidState;
     }
+    // One scheduler per system (owned by the Kernel); the timer
+    // callback needs a static way back to it because the packed arg
+    // has no room for a pointer.
+    s_instance_ = this;
 
     mutex_ = xSemaphoreCreateMutex();
     if (mutex_ == nullptr) {
@@ -94,14 +109,13 @@ Result<JobHandle> Scheduler::schedule(uint32_t interval_ms, JobFn fn,
 
     job->fn = fn;
     job->ctx = ctx;
-    job->owner = this;
     job->priority = priority;
     job->periodic = periodic;
     job->generation++;
 
     const esp_timer_create_args_t timer_args = {
         .callback = &Scheduler::timerCallback,
-        .arg = job,
+        .arg = packTimerArg(job->slot, job->generation),
         .dispatch_method = ESP_TIMER_TASK,
         .name = "gallus_job",
         .skip_unhandled_events = true,
@@ -207,14 +221,21 @@ void Scheduler::stopTimer(esp_timer_handle_t timer) {
 /// Runs on the esp_timer task: validate the job and hand it to the
 /// tier worker. Never executes user code here.
 void Scheduler::timerCallback(void* arg) {
-    Job* job = static_cast<Job*>(arg);
-    Scheduler* self = job->owner;
+    Scheduler* self = s_instance_;
+    if (self == nullptr) {
+        return;
+    }
+    const uintptr_t packed = reinterpret_cast<uintptr_t>(arg);
+    const uint8_t slot = static_cast<uint8_t>(packed & 0xFF);
+    const uint16_t generation =
+        static_cast<uint16_t>((packed >> 8) & 0xFFFF);
 
     WorkItem item;
     xSemaphoreTake(self->mutex_, portMAX_DELAY);
-    if (!job->active) {
+    Job* job = &self->jobs_[slot];
+    if (!job->active || job->generation != generation) {
         xSemaphoreGive(self->mutex_);
-        return;  // cancelled between dispatch and now
+        return;  // cancelled (or slot recycled) between fire and now
     }
     item.fn = job->fn;
     item.ctx = job->ctx;

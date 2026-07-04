@@ -550,7 +550,14 @@ esp_err_t WifiService::portalGetHandler(httpd_req_t* req) {
 esp_err_t WifiService::portalPostHandler(httpd_req_t* req) {
     auto* self = static_cast<WifiService*>(req->user_ctx);
 
-    char body[192] = {};
+    // Sized for fully URL-encoded credentials: a 32-char SSID and a
+    // 64-char password encode at up to 3 bytes per character, plus the
+    // "ssid=&password=" framing.
+    char body[384] = {};
+    if (req->content_len >= static_cast<int>(sizeof(body))) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "form too large");
+        return ESP_FAIL;
+    }
     const int received =
         httpd_req_recv(req, body, sizeof(body) - 1);
     if (received <= 0) {
@@ -559,16 +566,29 @@ esp_err_t WifiService::portalPostHandler(httpd_req_t* req) {
     }
     body[received] = '\0';
 
-    char ssid[33] = {};
-    char password[65] = {};
+    // Extraction happens on the ENCODED values, so the buffers must
+    // hold the worst-case encoded length — truncating here used to
+    // silently persist a corrupted password.
+    char ssid[3 * 32 + 1] = {};
+    char password[3 * 64 + 1] = {};
     if (httpd_query_key_value(body, "ssid", ssid, sizeof(ssid)) != ESP_OK ||
         ssid[0] == '\0') {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing ssid");
         return ESP_FAIL;
     }
-    (void)httpd_query_key_value(body, "password", password, sizeof(password));
+    const esp_err_t pw_err =
+        httpd_query_key_value(body, "password", password, sizeof(password));
+    if (pw_err != ESP_OK && pw_err != ESP_ERR_NOT_FOUND) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "password too long");
+        return ESP_FAIL;
+    }
     urlDecode(ssid);
     urlDecode(password);
+    if (strlen(ssid) > 32 || strlen(password) > 64) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                            "ssid or password too long");
+        return ESP_FAIL;
+    }
 
     Status status = self->config_.setString("wifi", "ssid", ssid);
     if (status.ok()) {

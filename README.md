@@ -45,7 +45,11 @@ Primary target hardware: **Seeed Studio XIAO ESP32-C5** (8 MB flash).
 - Battery sense: GPIO6 (ADC, 1:2 divider) with enable on GPIO26
 - I2C display bus: SDA GPIO23, SCL GPIO24 (SSD1306 128×64)
 
-Reserved system pins (not available to modules): **6, 23, 24, 26, 27, 28**.
+Protected system pins:
+
+- **Critical — never claimable by modules:** 6, 26 (battery circuit), 28 (BOOT button)
+- **Reserved — system-owned, forced claim only:** 23, 24 (I2C / display bus)
+- **27 (user LED)** is free for modules and is the default pin for `gpio_blink`.
 
 ---
 

@@ -104,6 +104,14 @@ extern "C" void app_main(void) {
           i2c.init(gallus::hal::board::kPinI2cSda,
                    gallus::hal::board::kPinI2cScl));
 
+    // The I2C bus is system-owned (display lives on it): mark its pins
+    // Reserved so a module can only take them with an explicit forced
+    // claim, not a plain requestPin().
+    check("i2c sda reserve",
+          gpio.reserve(gallus::hal::board::kPinI2cSda, "i2c_bus"));
+    check("i2c scl reserve",
+          gpio.reserve(gallus::hal::board::kPinI2cScl, "i2c_bus"));
+
     // Bring the OLED up early and play the splash while the rest of
     // the system (and WiFi) comes online. init() returns NotFound
     // when no panel is attached, which is fine — the board runs

@@ -51,6 +51,11 @@ public:
     /// otherwise a 401 response has already been sent.
     bool authorize(httpd_req_t* req) const;
 
+    /// Token check for WebSocket handshakes: accepts the Bearer header
+    /// or a ?token= query parameter (browsers cannot set headers on a
+    /// WebSocket). Sends no response — the caller closes the socket.
+    bool authorizeWs(httpd_req_t* req) const;
+
     /// Reload system/api_token from config (after a settings change).
     void reloadToken();
 
@@ -60,6 +65,8 @@ public:
     [[nodiscard]] httpd_handle_t server() const { return server_; }
 
 private:
+    bool bearerAuthorized(httpd_req_t* req) const;
+
     ConfigService& config_;
     httpd_handle_t server_ = nullptr;
     char token_[64] = {};

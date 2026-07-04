@@ -98,24 +98,49 @@ Status RestService::unregisterRoute(httpd_method_t method, const char* uri) {
     return fromEspErr(err);
 }
 
+bool RestService::bearerAuthorized(httpd_req_t* req) const {
+    char header[96] = {};
+    if (httpd_req_get_hdr_value_str(req, "Authorization", header,
+                                    sizeof(header)) != ESP_OK) {
+        return false;
+    }
+    const char* kPrefix = "Bearer ";
+    return strncmp(header, kPrefix, strlen(kPrefix)) == 0 &&
+           strcmp(header + strlen(kPrefix), token_) == 0;
+}
+
 bool RestService::authorize(httpd_req_t* req) const {
     if (token_[0] == '\0') {
         return true;  // open access (warned at init)
     }
-
-    char header[96] = {};
-    if (httpd_req_get_hdr_value_str(req, "Authorization", header,
-                                    sizeof(header)) == ESP_OK) {
-        const char* kPrefix = "Bearer ";
-        if (strncmp(header, kPrefix, strlen(kPrefix)) == 0 &&
-            strcmp(header + strlen(kPrefix), token_) == 0) {
-            return true;
-        }
+    if (bearerAuthorized(req)) {
+        return true;
     }
 
     httpd_resp_set_status(req, "401 Unauthorized");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"error\":\"unauthorized\"}");
+    return false;
+}
+
+bool RestService::authorizeWs(httpd_req_t* req) const {
+    if (token_[0] == '\0') {
+        return true;
+    }
+    if (bearerAuthorized(req)) {
+        return true;  // non-browser clients can send the header
+    }
+
+    // Browsers cannot set headers on a WebSocket handshake, so also
+    // accept the token as a query parameter: /ws?token=<token>.
+    char query[160] = {};
+    char token[sizeof(token_)] = {};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
+        httpd_query_key_value(query, "token", token, sizeof(token)) ==
+            ESP_OK &&
+        strcmp(token, token_) == 0) {
+        return true;
+    }
     return false;
 }
 

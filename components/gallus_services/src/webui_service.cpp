@@ -133,6 +133,10 @@ esp_err_t WebUiService::wsHandler(httpd_req_t* req) {
     auto* self = static_cast<WebUiService*>(req->user_ctx);
 
     if (req->method == HTTP_GET) {
+        if (!self->rest_.authorizeWs(req)) {
+            Log::warn(kTag, "ws client rejected (bad or missing token)");
+            return ESP_FAIL;  // closes the socket
+        }
         self->addClient(httpd_req_to_sockfd(req));
         Log::info(kTag, "ws client connected (fd %d)",
                   httpd_req_to_sockfd(req));

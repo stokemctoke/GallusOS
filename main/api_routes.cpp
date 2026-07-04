@@ -591,6 +591,15 @@ esp_err_t filesReadHandler(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing path");
     }
 
+    // Config files hold secrets (wifi password, api_token) that the
+    // config API deliberately redacts — don't hand them out raw here.
+    if (strncmp(path, "/fs/config", 10) == 0 &&
+        (path[10] == '\0' || path[10] == '/')) {
+        return httpd_resp_send_err(req, HTTPD_403_FORBIDDEN,
+                                   "config files are not readable here — "
+                                   "use /api/v1/config");
+    }
+
     // Heap-allocated: the httpd task stack is far smaller than this
     // buffer (see RestService::init).
     std::unique_ptr<char[]> buf(new (std::nothrow) char[kMaxFileReadBytes]);

@@ -236,9 +236,16 @@
   <div class="card full">
     <h2>Security</h2>
     <div class="row"><span class="k">API token</span></div>
-    <input type="password" id="cfgToken" placeholder="Leave blank for open API">
-    <button id="cfgTokenSave" style="margin-top:10px">Save token</button>
-    <div class="muted" id="cfgTokenMsg" style="margin-top:8px"></div>
+    <input type="password" id="cfgToken" placeholder="Enter API token" autocomplete="new-password">
+    <input type="password" id="cfgTokenConfirm" placeholder="Re-enter API token" autocomplete="new-password" style="margin-top:8px">
+    <div class="ota-row" style="margin-top:10px">
+      <button id="cfgTokenSave">Save token</button>
+      <button id="cfgTokenClear" class="btn-ghost">Clear token</button>
+    </div>
+    <div class="muted" id="cfgTokenMsg" style="margin-top:8px">
+      Letters, digits, <code>-</code> <code>_</code> <code>.</code> only (max 63).
+      Enter it twice to save. A lost token can only be cleared over serial.
+    </div>
   </div>
   <div class="card full">
     <h2>Device</h2>
@@ -311,9 +318,11 @@ function authOpts(opts) {
   return opts;
 }
 
+let tokenRequired = false;  // device answered 401 — a token is needed
+
 function apiFetch(url, opts) {
   return fetch(url, authOpts(opts)).then(r => {
-    if (r.status === 401) showTokenBar();
+    if (r.status === 401) { tokenRequired = true; showTokenBar(); }
     return r;
   });
 }
@@ -737,13 +746,25 @@ async function runSystemInfoSnapshot() {
   }
 }
 
+let wsBackoff = 2000;
 function connectWs() {
   const ws = new WebSocket("ws://" + location.host + "/ws" +
     (apiToken ? "?token=" + encodeURIComponent(apiToken) : ""));
   ws.onopen = () => { $("dot").classList.add("live");
-    $("connText").textContent = "live"; };
-  ws.onclose = () => { $("dot").classList.remove("live");
-    $("connText").textContent = "reconnecting"; setTimeout(connectWs, 2000); };
+    $("connText").textContent = "live"; wsBackoff = 2000; };
+  ws.onclose = () => {
+    $("dot").classList.remove("live");
+    // A token is required but we don't hold one: stop hammering the
+    // handshake (which the device rejects and logs). Entering a token
+    // reloads the page and restarts the socket.
+    if (tokenRequired && !apiToken) {
+      $("connText").textContent = "token required";
+      return;
+    }
+    $("connText").textContent = "reconnecting";
+    setTimeout(connectWs, wsBackoff);
+    wsBackoff = Math.min(wsBackoff * 2, 30000);  // exponential backoff
+  };
   ws.onmessage = ev => {
     let d; try { d = JSON.parse(ev.data); } catch(e) { return; }
     if (d.type === "battery") setBattery(d.pct, d.mv);
@@ -787,9 +808,18 @@ $("fwbtn").onclick = () => {
       $("otamsg").textContent = "Uploading… " + p + "%";
     }
   };
-  xhr.onload = () => { $("otamsg").textContent =
-    xhr.status === 200 ? "Uploaded — device rebooting." :
-    "Update failed (" + xhr.status + ")."; };
+  xhr.onload = () => {
+    if (xhr.status === 401) {
+      tokenRequired = true;
+      showTokenBar();
+      $("otamsg").textContent = "Unauthorized — enter the API token and retry.";
+      $("fwbtn").disabled = false;
+      return;
+    }
+    $("otamsg").textContent = xhr.status === 200
+      ? "Uploaded — device rebooting."
+      : "Update failed (" + xhr.status + ").";
+  };
   xhr.onerror = () => { $("otamsg").textContent = "Upload error.";
     $("fwbtn").disabled = false; };
   xhr.send(f);
@@ -927,8 +957,12 @@ $("apiGo").onclick = async () => {
 async function loadSettings() {
   try {
     const sys = await apiFetch("/api/v1/config?namespace=system").then(r => r.json());
-    $("cfgToken").value = sys.values.api_token === "(set)" ? "" : (sys.values.api_token || "");
-    $("cfgToken").placeholder = sys.values.api_token === "(set)" ? "(token is set)" : "Leave blank for open API";
+    const isSet = sys.values.api_token === "(set)";
+    $("cfgToken").value = "";
+    $("cfgTokenConfirm").value = "";
+    $("cfgToken").placeholder = isSet
+      ? "(token is set — enter a new one to change)"
+      : "Enter API token";
   } catch (e) {}
   try {
     const wifi = await apiFetch("/api/v1/config?namespace=wifi").then(r => r.json());
@@ -1052,25 +1086,62 @@ $("wifiSave").onclick = async () => {
   }
 };
 
+// Must survive both the HTTP Authorization header and the /ws ?token=
+// query string, so keep it to URL-safe characters.
+const TOKEN_RE = /^[A-Za-z0-9._-]{1,63}$/;
+
 $("cfgTokenSave").onclick = async () => {
   const tok = $("cfgToken").value.trim();
+  const again = $("cfgTokenConfirm").value.trim();
+  if (!tok || !again) {
+    $("cfgTokenMsg").textContent =
+      "Enter the token in both boxes (or use Clear token to disable auth).";
+    return;
+  }
+  if (tok !== again) {
+    $("cfgTokenMsg").textContent = "The two entries do not match.";
+    return;
+  }
+  if (!TOKEN_RE.test(tok)) {
+    $("cfgTokenMsg").textContent =
+      "Use only letters, digits, - _ . (max 63 characters).";
+    return;
+  }
   const d = await saveConfig("system", {api_token: tok}, $("cfgTokenMsg"));
   if (!d) return;
   // Keep this browser authorized against the token it just set.
   apiToken = tok;
-  if (tok) localStorage.setItem("gallus_token", tok);
-  else localStorage.removeItem("gallus_token");
-  $("cfgTokenMsg").textContent = tok
-    ? "Token saved — this browser stays signed in."
-    : "Token cleared — API is open.";
+  localStorage.setItem("gallus_token", tok);
+  tokenRequired = false;
+  $("cfgToken").value = "";
+  $("cfgTokenConfirm").value = "";
+  $("cfgTokenMsg").textContent = "Token saved — this browser stays signed in.";
+};
+
+$("cfgTokenClear").onclick = async () => {
+  if (!window.confirm(
+      "Disable API authentication? The API will be open to anyone on the network.")) {
+    return;
+  }
+  const d = await saveConfig("system", {api_token: ""}, $("cfgTokenMsg"));
+  if (!d) return;
+  apiToken = "";
+  localStorage.removeItem("gallus_token");
+  tokenRequired = false;
+  $("cfgToken").value = "";
+  $("cfgTokenConfirm").value = "";
+  $("cfgTokenMsg").textContent = "Token cleared — API is open.";
 };
 
 $("sysReboot").onclick = async () => {
   $("sysMsg").textContent = "Rebooting…";
   try {
-    await apiFetch("/api/v1/system/reboot", {method: "POST"});
+    const r = await apiFetch("/api/v1/system/reboot", {method: "POST"});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    $("sysMsg").textContent = "Reboot requested — device restarting.";
   } catch (e) {
-    $("sysMsg").textContent = "Reboot requested.";
+    $("sysMsg").textContent =
+      "Reboot failed" + (e.message ? " (" + e.message + ")" : "") + ".";
   }
 };
 

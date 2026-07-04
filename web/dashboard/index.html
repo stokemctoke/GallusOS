@@ -294,7 +294,59 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const api = p => fetch("/api/v1/" + p).then(r => r.json());
+
+// --- API token handling -----------------------------------------------
+// The firmware enforces "Authorization: Bearer <token>" on every
+// /api/v1/ route when system/api_token is set. The token is kept in
+// localStorage; a 401 raises a banner asking for it.
+let apiToken = localStorage.getItem("gallus_token") || "";
+let tokenBarShown = false;
+
+function authOpts(opts) {
+  opts = opts || {};
+  if (apiToken) {
+    opts.headers = Object.assign({}, opts.headers || {},
+      { "Authorization": "Bearer " + apiToken });
+  }
+  return opts;
+}
+
+function apiFetch(url, opts) {
+  return fetch(url, authOpts(opts)).then(r => {
+    if (r.status === 401) showTokenBar();
+    return r;
+  });
+}
+
+function showTokenBar() {
+  if (tokenBarShown) return;
+  tokenBarShown = true;
+  const bar = document.createElement("div");
+  bar.id = "tokenBar";
+  bar.style.cssText =
+    "position:fixed;top:0;left:0;right:0;z-index:99;background:#8a1f0b;" +
+    "color:#fff;padding:10px 14px;display:flex;gap:8px;align-items:center;" +
+    "flex-wrap:wrap;font-size:14px";
+  bar.innerHTML =
+    '<span>This device requires an API token.</span>' +
+    '<input id="tokenBarInput" type="password" placeholder="Paste API token"' +
+    ' style="flex:1;min-width:160px;max-width:280px;padding:6px;' +
+    'border-radius:6px;border:0">' +
+    '<button id="tokenBarSave" style="padding:6px 14px">Unlock</button>';
+  document.body.appendChild(bar);
+  $("tokenBarInput").onkeydown = e => {
+    if (e.key === "Enter") $("tokenBarSave").click();
+  };
+  $("tokenBarSave").onclick = () => {
+    const tok = $("tokenBarInput").value.trim();
+    if (tok) localStorage.setItem("gallus_token", tok);
+    else localStorage.removeItem("gallus_token");
+    location.reload();
+  };
+}
+// -----------------------------------------------------------------------
+
+const api = p => apiFetch("/api/v1/" + p).then(r => r.json());
 
 function fmtUptime(ms) {
   const s = Math.floor(ms/1000), h = Math.floor(s/3600),
@@ -397,7 +449,7 @@ function switchTab(tab) {
 }
 
 async function postModule(name, action) {
-  const r = await fetch("/api/v1/modules/" + encodeURIComponent(name) + "/" + action,
+  const r = await apiFetch("/api/v1/modules/" + encodeURIComponent(name) + "/" + action,
     { method: "POST" });
   const text = await r.text();
   let body;
@@ -531,7 +583,7 @@ async function loadModuleSettingsForm() {
   }
   $("modSettings").innerHTML = '<div class="muted">Loading settings…</div>';
   try {
-    const d = await fetch("/api/v1/config?namespace=" +
+    const d = await apiFetch("/api/v1/config?namespace=" +
       encodeURIComponent(mod.name)).then(r => r.json());
     modSettingsCache = d.values || {};
     let html = fields.map(f => {
@@ -634,7 +686,7 @@ async function runWifiScan() {
   const band = $("wifiScanBand").value;
   showScanBusy("wifiScanOut", "wifiScanBtn", "Scanning WiFi…");
   try {
-    const d = await fetch("/api/v1/wifi/scan?band=" + encodeURIComponent(band))
+    const d = await apiFetch("/api/v1/wifi/scan?band=" + encodeURIComponent(band))
       .then(r => r.json());
     if (!d.networks || !d.networks.length) {
       $("wifiScanOut").innerHTML = '<div class="muted">No networks found.</div>';
@@ -686,7 +738,8 @@ async function runSystemInfoSnapshot() {
 }
 
 function connectWs() {
-  const ws = new WebSocket("ws://" + location.host + "/ws");
+  const ws = new WebSocket("ws://" + location.host + "/ws" +
+    (apiToken ? "?token=" + encodeURIComponent(apiToken) : ""));
   ws.onopen = () => { $("dot").classList.add("live");
     $("connText").textContent = "live"; };
   ws.onclose = () => { $("dot").classList.remove("live");
@@ -726,6 +779,7 @@ $("fwbtn").onclick = () => {
   $("otamsg").textContent = "Uploading…";
   const xhr = new XMLHttpRequest();
   xhr.open("POST", "/api/v1/ota/upload");
+  if (apiToken) xhr.setRequestHeader("Authorization", "Bearer " + apiToken);
   xhr.upload.onprogress = e => {
     if (e.lengthComputable) {
       const p = Math.round(e.loaded/e.total*100);
@@ -779,7 +833,7 @@ $("diagRefresh").onclick = loadDiagnostics;
 async function loadFiles(path) {
   $("fsPath").textContent = path;
   try {
-    const d = await fetch("/api/v1/files/list?path=" + encodeURIComponent(path)).then(r => r.json());
+    const d = await apiFetch("/api/v1/files/list?path=" + encodeURIComponent(path)).then(r => r.json());
     $("fsEntries").innerHTML = '<table><tr><th>Name</th><th>Type</th><th>Size</th></tr>' +
       d.entries.map(e => {
         const full = path + (path.endsWith("/") ? "" : "/") + e.name;
@@ -797,7 +851,7 @@ async function loadFiles(path) {
 
 async function readFile(path) {
   try {
-    const d = await fetch("/api/v1/files/read?path=" + encodeURIComponent(path)).then(r => r.json());
+    const d = await apiFetch("/api/v1/files/read?path=" + encodeURIComponent(path)).then(r => r.json());
     $("fsPreview").textContent = d.content || "";
   } catch (e) {
     $("fsPreview").textContent = "Read failed.";
@@ -846,7 +900,7 @@ $("apiGo").onclick = async () => {
     opts.body = bodyText;
   }
   try {
-    const r = await fetch(path, opts);
+    const r = await apiFetch(path, opts);
     const text = await r.text();
     const prefix = r.ok ? "" : "HTTP " + r.status + "\n\n";
     try {
@@ -862,12 +916,12 @@ $("apiGo").onclick = async () => {
 
 async function loadSettings() {
   try {
-    const sys = await fetch("/api/v1/config?namespace=system").then(r => r.json());
+    const sys = await apiFetch("/api/v1/config?namespace=system").then(r => r.json());
     $("cfgToken").value = sys.values.api_token === "(set)" ? "" : (sys.values.api_token || "");
     $("cfgToken").placeholder = sys.values.api_token === "(set)" ? "(token is set)" : "Leave blank for open API";
   } catch (e) {}
   try {
-    const wifi = await fetch("/api/v1/config?namespace=wifi").then(r => r.json());
+    const wifi = await apiFetch("/api/v1/config?namespace=wifi").then(r => r.json());
     $("wifiSsid").value = wifi.values.ssid || "";
     $("wifiPass").value = "";
     $("wifiPass").placeholder =
@@ -886,7 +940,7 @@ function stripRedactedSecrets(values) {
 async function saveConfig(ns, values, msgEl) {
   msgEl.textContent = "Saving…";
   try {
-    const r = await fetch("/api/v1/config", {
+    const r = await apiFetch("/api/v1/config", {
       method: "PUT",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({namespace: ns, values})
@@ -908,7 +962,7 @@ async function loadConfigTab() {
   sel.innerHTML = "";
   const defaults = ["system", "wifi", "network"];
   try {
-    const d = await fetch("/api/v1/files/list?path=/fs/config").then(r => r.json());
+    const d = await apiFetch("/api/v1/files/list?path=/fs/config").then(r => r.json());
     const names = d.entries
       .filter(e => !e.dir && e.name.endsWith(".json"))
       .map(e => e.name.replace(/\.json$/, ""));
@@ -935,7 +989,7 @@ async function loadConfigNamespace() {
   if (!ns) return;
   $("cfgMsg").textContent = "Loading…";
   try {
-    const d = await fetch("/api/v1/config?namespace=" + encodeURIComponent(ns))
+    const d = await apiFetch("/api/v1/config?namespace=" + encodeURIComponent(ns))
       .then(r => r.json());
     $("cfgJson").value = JSON.stringify(d.values || {}, null, 2);
     $("cfgMsg").textContent = "Loaded " + ns + ".";
@@ -977,7 +1031,7 @@ $("wifiSave").onclick = async () => {
   if (!saved) return;
   $("wifiMsg").textContent = "Reconnecting…";
   try {
-    const r = await fetch("/api/v1/system/wifi-reconnect", {method: "POST"});
+    const r = await apiFetch("/api/v1/system/wifi-reconnect", {method: "POST"});
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "failed");
     $("wifiMsg").textContent = "Reconnecting — page may reload when WiFi is back.";
@@ -988,18 +1042,23 @@ $("wifiSave").onclick = async () => {
   }
 };
 
-$("cfgTokenSave").onclick = () => {
+$("cfgTokenSave").onclick = async () => {
   const tok = $("cfgToken").value.trim();
-  const values = {};
-  if (tok) values.api_token = tok;
-  else values.api_token = "";
-  saveConfig("system", values, $("cfgTokenMsg"));
+  const d = await saveConfig("system", {api_token: tok}, $("cfgTokenMsg"));
+  if (!d) return;
+  // Keep this browser authorized against the token it just set.
+  apiToken = tok;
+  if (tok) localStorage.setItem("gallus_token", tok);
+  else localStorage.removeItem("gallus_token");
+  $("cfgTokenMsg").textContent = tok
+    ? "Token saved — this browser stays signed in."
+    : "Token cleared — API is open.";
 };
 
 $("sysReboot").onclick = async () => {
   $("sysMsg").textContent = "Rebooting…";
   try {
-    await fetch("/api/v1/system/reboot", {method: "POST"});
+    await apiFetch("/api/v1/system/reboot", {method: "POST"});
   } catch (e) {
     $("sysMsg").textContent = "Reboot requested.";
   }
@@ -1009,7 +1068,7 @@ $("sysReset").onclick = async () => {
   if (!confirm("Erase WiFi credentials and all saved settings?")) return;
   $("sysMsg").textContent = "Resetting…";
   try {
-    const r = await fetch("/api/v1/system/reset", {method: "POST"});
+    const r = await apiFetch("/api/v1/system/reset", {method: "POST"});
     if (!r.ok) throw new Error("failed");
     $("sysMsg").textContent = "Settings cleared — rebooting into setup mode.";
   } catch (e) {
@@ -1021,7 +1080,7 @@ $("sysCharge").onclick = async () => {
   if (!confirm("Enter charge mode? WiFi will disconnect.")) return;
   $("sysMsg").textContent = "Entering charge mode…";
   try {
-    const r = await fetch("/api/v1/system/charge-mode", {
+    const r = await apiFetch("/api/v1/system/charge-mode", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({enable: true})

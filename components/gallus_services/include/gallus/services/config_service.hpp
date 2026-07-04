@@ -57,6 +57,11 @@ public:
     Status setFloat(const char* ns, const char* key, float value);
     Status setString(const char* ns, const char* key, const char* value);
 
+    /// Store a raw JSON number (no int/float coercion) — what the
+    /// config REST API uses, since JSON numbers are doubles. getInt
+    /// and getFloat both read it back fine.
+    Status setNumber(const char* ns, const char* key, double value);
+
     /// Remove one key from a namespace.
     Status erase(const char* ns, const char* key);
 
@@ -70,7 +75,6 @@ public:
 private:
     void* loadNamespace(const char* ns) const;  // returns cJSON*
     Status saveNamespace(const char* ns, void* doc);
-    Status setNumber(const char* ns, const char* key, double value);
     void publishChanged(const char* ns, const char* key);
     void path(const char* ns, char* out, size_t cap) const;
 

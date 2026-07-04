@@ -378,7 +378,9 @@ Status applyConfigValue(services::ConfigService& config, const char* ns,
         return config.setBool(ns, key, cJSON_IsTrue(value));
     }
     if (cJSON_IsNumber(value)) {
-        return config.setInt(ns, key, static_cast<int32_t>(value->valuedouble));
+        // Store the JSON number as-is: coercing to int32 silently
+        // truncated float settings like calibration factors.
+        return config.setNumber(ns, key, value->valuedouble);
     }
     if (cJSON_IsString(value) && value->valuestring != nullptr) {
         if (strcmp(value->valuestring, "(set)") == 0) {

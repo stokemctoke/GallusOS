@@ -823,7 +823,17 @@ async function loadDiagnostics() {
     }
     if (d.tasks) html += row("Task count", d.tasks.count);
     $("diagRows").innerHTML = html;
-    $("taskList").textContent = d.tasks && d.tasks.list ? d.tasks.list : "";
+    if (d.tasks && Array.isArray(d.tasks.list)) {
+      const st = ["run", "ready", "blocked", "suspended", "deleted"];
+      $("taskList").textContent = d.tasks.list
+        .map(t => (t.name + "                ").slice(0, 16) +
+          " prio " + String(t.prio).padStart(2) +
+          "  stack " + String(t.stack_hwm).padStart(5) +
+          "  " + (st[t.state] || t.state))
+        .join("\n");
+    } else {
+      $("taskList").textContent = d.tasks && d.tasks.list ? d.tasks.list : "";
+    }
   } catch (e) {
     $("diagRows").innerHTML = '<div class="muted">Failed to load diagnostics.</div>';
   }

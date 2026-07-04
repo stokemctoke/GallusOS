@@ -1,5 +1,7 @@
 #include "gallus/services/diagnostics_service.hpp"
 
+#include <new>
+
 #include "cJSON.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -41,11 +43,29 @@ cJSON* DiagnosticsService::snapshotJson() const {
 
     cJSON* tasks = cJSON_AddObjectToObject(doc, "tasks");
     cJSON_AddNumberToObject(tasks, "count", uxTaskGetNumberOfTasks());
-#if CONFIG_FREERTOS_USE_TRACE_FACILITY && \
-    CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS
-    char task_buf[1024] = {};
-    vTaskList(task_buf);
-    cJSON_AddStringToObject(tasks, "list", task_buf);
+#if CONFIG_FREERTOS_USE_TRACE_FACILITY
+    // Bounded replacement for vTaskList(), which writes into its
+    // argument with no size limit and would eventually overflow any
+    // fixed buffer as the task count grows.
+    const UBaseType_t capacity = uxTaskGetNumberOfTasks() + 4;
+    auto* states = new (std::nothrow) TaskStatus_t[capacity];
+    if (states != nullptr) {
+        const UBaseType_t got =
+            uxTaskGetSystemState(states, capacity, nullptr);
+        cJSON* list = cJSON_AddArrayToObject(tasks, "list");
+        for (UBaseType_t i = 0; i < got; ++i) {
+            cJSON* row = cJSON_CreateObject();
+            cJSON_AddStringToObject(row, "name", states[i].pcTaskName);
+            cJSON_AddNumberToObject(row, "prio",
+                                    states[i].uxCurrentPriority);
+            cJSON_AddNumberToObject(row, "stack_hwm",
+                                    states[i].usStackHighWaterMark);
+            cJSON_AddNumberToObject(row, "state",
+                                    states[i].eCurrentState);
+            cJSON_AddItemToArray(list, row);
+        }
+        delete[] states;
+    }
 #endif
 
     return doc;

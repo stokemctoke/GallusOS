@@ -1,6 +1,8 @@
 #include "api_routes.hpp"
 
 #include <cstring>
+#include <memory>
+#include <new>
 
 #include "cJSON.h"
 #include "esp_idf_version.h"
@@ -589,8 +591,15 @@ esp_err_t filesReadHandler(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing path");
     }
 
-    char buf[kMaxFileReadBytes];
-    const auto read = ctx->storage->readFile(path, buf, sizeof(buf) - 1);
+    // Heap-allocated: the httpd task stack is far smaller than this
+    // buffer (see RestService::init).
+    std::unique_ptr<char[]> buf(new (std::nothrow) char[kMaxFileReadBytes]);
+    if (buf == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "out of memory");
+    }
+    const auto read =
+        ctx->storage->readFile(path, buf.get(), kMaxFileReadBytes - 1);
     if (!read.ok()) {
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
     }
@@ -599,7 +608,7 @@ esp_err_t filesReadHandler(httpd_req_t* req) {
     cJSON* doc = cJSON_CreateObject();
     cJSON_AddStringToObject(doc, "path", path);
     cJSON_AddNumberToObject(doc, "size", read.value());
-    cJSON_AddStringToObject(doc, "content", buf);
+    cJSON_AddStringToObject(doc, "content", buf.get());
     return sendJson(req, doc);
 }
 

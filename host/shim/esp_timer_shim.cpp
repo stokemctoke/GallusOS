@@ -24,6 +24,10 @@ struct TimerState {
 
 std::mutex g_mutex;
 std::unordered_map<esp_timer_handle_t, std::unique_ptr<TimerState>> g_timers;
+// Timers deleted from their own callback: the worker thread is
+// detached and the state parked here so it stays valid until exit
+// (mirrors ESP-IDF, where delete-from-callback is allowed).
+std::vector<std::unique_ptr<TimerState>> g_zombies;
 uint64_t next_id = 1;
 
 void runTimer(TimerState* state) {
@@ -42,11 +46,15 @@ void runTimer(TimerState* state) {
     }
 
     std::this_thread::sleep_for(std::chrono::microseconds(state->period_us));
-    if (state->running.load(std::memory_order_relaxed) &&
-        state->callback != nullptr) {
+    if (!state->running.load(std::memory_order_relaxed)) {
+        return;
+    }
+    // Clear running BEFORE the callback: the callback may delete this
+    // timer, and state must not be touched after it returns.
+    state->running.store(false, std::memory_order_relaxed);
+    if (state->callback != nullptr) {
         state->callback(state->arg);
     }
-    state->running.store(false, std::memory_order_relaxed);
 }
 
 }  // namespace
@@ -139,7 +147,11 @@ esp_err_t esp_timer_stop(esp_timer_handle_t handle) {
     TimerState* state = it->second.get();
     state->running.store(false, std::memory_order_relaxed);
     if (state->worker.joinable()) {
-        state->worker.join();
+        if (state->worker.get_id() == std::this_thread::get_id()) {
+            state->worker.detach();  // stop from own callback
+        } else {
+            state->worker.join();
+        }
     }
     return ESP_OK;
 }
@@ -154,6 +166,14 @@ esp_err_t esp_timer_delete(esp_timer_handle_t handle) {
     TimerState* state = it->second.get();
     state->running.store(false, std::memory_order_relaxed);
     if (state->worker.joinable()) {
+        if (state->worker.get_id() == std::this_thread::get_id()) {
+            // Delete from the timer's own callback: detach and park
+            // the state so the still-running thread stays valid.
+            state->worker.detach();
+            g_zombies.push_back(std::move(it->second));
+            g_timers.erase(it);
+            return ESP_OK;
+        }
         state->worker.join();
     }
     g_timers.erase(it);

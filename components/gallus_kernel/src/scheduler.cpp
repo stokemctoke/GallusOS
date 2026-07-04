@@ -207,6 +207,20 @@ void Scheduler::timerCallback(void* arg) {
     if (xQueueSend(self->tier_queues_[tier], &item, 0) != pdTRUE) {
         Log::warn(kTag, "tier %u queue full, execution skipped",
                   static_cast<unsigned>(tier));
+        if (item.release_after_run) {
+            // One-shot: the dropped WorkItem was the only thing that
+            // would have released the slot and deleted the timer, so
+            // clean up here. esp_timer allows stop/delete from the
+            // timer's own callback.
+            esp_timer_handle_t timer = nullptr;
+            xSemaphoreTake(self->mutex_, portMAX_DELAY);
+            Job& dropped = self->jobs_[item.slot];
+            if (dropped.active && dropped.generation == item.generation) {
+                timer = self->detachTimerLocked(dropped);
+            }
+            xSemaphoreGive(self->mutex_);
+            stopTimer(timer);
+        }
     }
 }
 

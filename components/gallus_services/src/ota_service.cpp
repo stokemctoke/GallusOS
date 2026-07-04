@@ -17,6 +17,12 @@ namespace {
 constexpr const char* kTag = "OTA";
 constexpr size_t kChunkBytes = 1024;
 
+/// Consecutive socket-timeout retries before the upload is abandoned.
+/// With httpd's default 5 s receive timeout this tolerates ~50 s of
+/// stall — beyond that the client is gone and looping forever would
+/// wedge the single httpd task (and block future updates).
+constexpr int kMaxRecvTimeouts = 10;
+
 void rebootJob(void* /*ctx*/) { esp_restart(); }
 
 }  // namespace
@@ -88,6 +94,7 @@ esp_err_t OtaService::uploadHandler(httpd_req_t* req) {
     int received = 0;
     uint8_t last_pct = 255;
     bool failed = false;
+    int timeouts = 0;
     while (received < total) {
         const int want =
             static_cast<int>(total - received) < static_cast<int>(kChunkBytes)
@@ -95,12 +102,14 @@ esp_err_t OtaService::uploadHandler(httpd_req_t* req) {
                 : static_cast<int>(kChunkBytes);
         const int got = httpd_req_recv(req, buf, want);
         if (got <= 0) {
-            if (got == HTTPD_SOCK_ERR_TIMEOUT) {
+            if (got == HTTPD_SOCK_ERR_TIMEOUT &&
+                ++timeouts < kMaxRecvTimeouts) {
                 continue;
             }
             failed = true;
             break;
         }
+        timeouts = 0;
 
         if (esp_ota_write(handle, buf, got) != ESP_OK) {
             failed = true;

@@ -3,6 +3,73 @@
 All notable changes to GallusOS are documented here. The project follows
 [Semantic Versioning](https://semver.org/) for firmware and module manifests.
 
+## [0.1.2] — 2026-07-04
+
+Hardening release: every finding from the July 2026 full-codebase review fixed
+([issues #1–#17](https://github.com/stokemctoke/GallusOS/issues?q=is%3Aissue+is%3Aclosed)),
+one commit per issue.
+
+### Security & auth
+
+- **Dashboard token support** — all dashboard requests (REST, OTA upload, WebSocket)
+  now send `Authorization: Bearer <token>`; a 401 raises an unlock banner and the
+  token persists in the browser. Previously, setting a token locked the dashboard out.
+- **`/ws` requires the token** — via header or `?token=` query; unauthorized sockets
+  are closed. Device logs/telemetry no longer stream without auth.
+- **`/api/v1/files/read` refuses `/fs/config`** — raw config files leaked the WiFi
+  password and API token past the config API's redaction.
+
+### Stability
+
+- **Fixed guaranteed stack overflow** in `/api/v1/files/read` (8 KB buffer on the
+  6 KB httpd stack) — buffer is now heap-allocated
+- **Bounded task snapshot** — diagnostics use `uxTaskGetSystemState` instead of the
+  unbounded `vTaskList`; dashboard shows per-task priority, stack high-water mark, state
+- **OTA timeout cap** — a stalled upload aborts after ~50 s instead of wedging the
+  HTTP server until power-cycle
+- **Charge mode over HTTP** — response is sent before the radio stops, so the
+  dashboard no longer reports an error on success
+
+### Kernel & module SDK
+
+- **Scheduler**: one-shot jobs no longer leak their slot/timer when a tier queue is
+  full; `cancel()` now fences on in-flight execution (safe to free ctx after return);
+  timer callbacks carry an immutable slot+generation and skip recycled slots
+- **Module teardown**: new `unregisterRoutes()` lifecycle hook — routes can no longer
+  outlive their module instance; route-registration failure fails the start instead
+  of running half-wired
+- **GPIO ownership**: `releasePin()` rejects callers that don't hold the pin;
+  I2C pins 23/24 are Reserved at boot (forced claim only)
+- **EventBus**: unsubscribe grace period documented (ctx lifetime contract)
+
+### Provisioning
+
+- **Long / special-character WiFi passwords survive setup** — portal buffers sized
+  for URL-encoded credentials, truncation rejected with a clear error
+
+### Dashboard & config
+
+- **Live log fixed** — whole lines, ANSI colour codes stripped (frames were invalid
+  JSON and silently dropped); one WebSocket frame per log line
+- **Float config values** — `PUT /api/v1/config` stores JSON numbers as doubles
+  instead of truncating to int32
+
+### Tooling & CI
+
+- Manifest generator enforces the 23-char module name limit at build time (new test)
+- HTTP route budget raised to 40 with slot-usage reporting on failure
+- CI: ESP-IDF pin restored via the install action's renamed `version` input
+  (the old input names were silently ignored, installing IDF 6.x and breaking builds)
+
+### Upgrade notes
+
+- If you set an API token, use only letters, digits, `-`, `_`, `.` (max 63 chars) —
+  it is compared raw in both the HTTP header and the WebSocket query string.
+- Module authors: if you override `registerRoutes()`, you MUST override
+  `unregisterRoutes()` (see `docs/MODULE_API.md`).
+
+[0.1.2]: https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.2
+
 ## [0.1.1] — 2026-07-03
 
 Patch release: module lifecycle, on-demand diagnostics, and dashboard polish since v0.1.0.

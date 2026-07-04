@@ -5,7 +5,7 @@
 
 # GallusOS: A Modular Embedded Operating Environment
 
-**Current release:** [v0.1.1](https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.1) — Modules dashboard with on-demand control, module lifecycle API, WiFi scan fixes, REST explorer POST support.
+**Current release:** [v0.1.2](https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.2) — hardening release: all 17 findings from the full codebase review fixed (auth-aware dashboard, WebSocket token auth, kernel/scheduler lifecycle fixes, provisioning robustness).
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 

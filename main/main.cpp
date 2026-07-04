@@ -81,7 +81,7 @@ extern "C" void app_main(void) {
     static gallus::services::ConfigService config(storage, kernel.events());
     static gallus::services::GpioService gpio(kernel.events());
     static gallus::services::I2cService i2c;
-    static gallus::services::RestService rest(config);
+    static gallus::services::RestService rest(config, kernel.events());
     static gallus::services::WifiService wifi(config, kernel.events(), rest);
     static gallus::services::NetworkService network(config, kernel.events());
     static gallus::services::TimeService time_service(kernel.events());

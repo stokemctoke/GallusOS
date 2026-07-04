@@ -22,6 +22,12 @@ Status RestService::init() {
                   "system/api_token to enable auth");
     }
 
+    // Keep token_ in sync with config writes from any source (config
+    // API, factory reset, provisioning) so a saved token is enforced
+    // immediately, without waiting for a reboot.
+    (void)events_.subscribe(EventId::ConfigChanged,
+                            &RestService::onConfigChanged, this);
+
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.max_uri_handlers = kMaxRoutes;
     cfg.uri_match_fn = httpd_uri_match_wildcard;
@@ -158,6 +164,20 @@ bool RestService::authorizeWs(httpd_req_t* req) const {
 
 void RestService::reloadToken() {
     (void)config_.getString("system", "api_token", token_, sizeof(token_), "");
+}
+
+void RestService::onConfigChanged(const Event& event, void* ctx) {
+    auto* self = static_cast<RestService*>(ctx);
+    const auto* changed = event.as<ConfigService::ChangedEvent>();
+    if (changed == nullptr) {
+        return;
+    }
+    if (strcmp(changed->ns, "system") == 0 &&
+        strcmp(changed->key, "api_token") == 0) {
+        self->reloadToken();
+        Log::info(kTag, "api_token updated — auth is now %s",
+                  self->token_[0] == '\0' ? "OPEN" : "enforced");
+    }
 }
 
 }  // namespace gallus::services

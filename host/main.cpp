@@ -89,7 +89,7 @@ int main() {
     static gallus::services::StorageService storage;
     static gallus::services::ConfigService config(storage, kernel.events());
     static gallus::services::GpioService gpio(kernel.events());
-    static gallus::services::RestService rest(config);
+    static gallus::services::RestService rest(config, kernel.events());
     static gallus::services::I2cService i2c;
     static gallus::services::WifiService wifi(config, kernel.events(), rest);
 

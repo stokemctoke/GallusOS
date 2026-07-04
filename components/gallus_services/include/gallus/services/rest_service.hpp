@@ -5,6 +5,7 @@
 #include "esp_http_server.h"
 
 #include "gallus/error.hpp"
+#include "gallus/event_bus.hpp"
 #include "gallus/services/config_service.hpp"
 
 /// @file rest_service.hpp
@@ -27,7 +28,8 @@ public:
 
     static constexpr size_t kMaxRoutes = 40;
 
-    explicit RestService(ConfigService& config) : config_(config) {}
+    RestService(ConfigService& config, EventBus& events)
+        : config_(config), events_(events) {}
     RestService(const RestService&) = delete;
     RestService& operator=(const RestService&) = delete;
 
@@ -70,7 +72,12 @@ public:
 private:
     bool bearerAuthorized(httpd_req_t* req) const;
 
+    /// Reloads token_ when system/api_token changes, so enforcement is
+    /// never stale regardless of which path wrote the config.
+    static void onConfigChanged(const Event& event, void* ctx);
+
     ConfigService& config_;
+    EventBus& events_;
     httpd_handle_t server_ = nullptr;
     size_t routes_used_ = 0;
     char token_[64] = {};

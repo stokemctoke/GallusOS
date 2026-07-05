@@ -1,0 +1,14 @@
+{
+  "name": "ble_scan",
+  "version": "0.1.0",
+  "description": "On-demand BLE device scanner (Bluetooth 5.0 LE on ESP32-C5; no Classic).",
+  "author": "Gallus Gadgets",
+  "license": "PolyForm-Perimeter-1.0.0",
+  "category": "Bluetooth",
+  "menu_icon": "bluetooth",
+  "required_services": ["config", "scheduler", "ble"],
+  "required_gpio": [],
+  "events_published": [],
+  "events_consumed": [],
+  "capabilities": ["ble_scan"]
+}

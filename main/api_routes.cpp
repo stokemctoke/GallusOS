@@ -1,5 +1,6 @@
 #include "api_routes.hpp"
 
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <new>
@@ -854,6 +855,101 @@ esp_err_t wifiScanHandler(httpd_req_t* req) {
     return sendJson(req, doc);
 }
 
+/// Friendly name for a handful of common BLE manufacturer company IDs.
+/// Not exhaustive — the client also gets the raw ID to map itself.
+const char* bleVendorName(uint16_t company_id) {
+    switch (company_id) {
+        case 0x004C: return "Apple";
+        case 0x0006: return "Microsoft";
+        case 0x00E0: return "Google";
+        case 0x0075: return "Samsung";
+        case 0x0087: return "Garmin";
+        case 0x0157: return "Huawei";
+        case 0x038F: return "Xiaomi";
+        case 0x0499: return "Ruuvi";
+        case 0x0059: return "Nordic";
+        case 0x05A7: return "Sonos";
+        default:     return "";
+    }
+}
+
+esp_err_t bleScanHandler(httpd_req_t* req) {
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (!ctx->rest->authorize(req)) {
+        return ESP_OK;
+    }
+    if (ctx->ble == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "ble not available");
+    }
+
+    uint32_t duration_ms = services::BleService::kDefaultScanMs;
+    char query[32] = {};
+    char ms_query[8] = {};
+    if (httpd_req_get_url_query_len(req) + 1 <= sizeof(query) &&
+        httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
+        httpd_query_key_value(query, "ms", ms_query, sizeof(ms_query)) ==
+            ESP_OK) {
+        const int v = atoi(ms_query);
+        if (v > 0) {
+            duration_ms = static_cast<uint32_t>(v);
+        }
+    }
+
+    constexpr size_t kMax = services::BleService::kMaxScanResults;
+    std::unique_ptr<services::BleService::BleRecord[]> records(
+        new (std::nothrow) services::BleService::BleRecord[kMax]);
+    if (records == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "out of memory");
+    }
+    const auto found = ctx->ble->scan(records.get(), kMax, duration_ms);
+    if (!found.ok()) {
+        const char* msg = found.error() == Error::Busy
+                              ? "a scan is already running"
+                              : found.message();
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, msg);
+    }
+
+    using Ble = services::BleService;
+    cJSON* doc = cJSON_CreateObject();
+    cJSON* list = cJSON_AddArrayToObject(doc, "devices");
+    for (size_t i = 0; i < found.value(); ++i) {
+        const auto& d = records[i];
+        cJSON* item = cJSON_CreateObject();
+        char addr[18] = {};
+        snprintf(addr, sizeof(addr), "%02X:%02X:%02X:%02X:%02X:%02X",
+                 d.addr[0], d.addr[1], d.addr[2], d.addr[3], d.addr[4],
+                 d.addr[5]);
+        cJSON_AddStringToObject(item, "address", addr);
+        cJSON_AddStringToObject(
+            item, "address_type",
+            d.addr_type == 0 ? "public" : "random");
+        cJSON_AddStringToObject(item, "name", d.name);
+        cJSON_AddNumberToObject(item, "rssi", d.rssi);
+        cJSON_AddBoolToObject(item, "connectable",
+                              (d.flags & Ble::kFlagConnectable) != 0);
+        if (d.flags & Ble::kFlagHasTxPower) {
+            cJSON_AddNumberToObject(item, "tx_power", d.tx_power);
+        }
+        if (d.company_id != 0xFFFF) {
+            cJSON_AddNumberToObject(item, "company_id", d.company_id);
+            const char* vendor = bleVendorName(d.company_id);
+            if (vendor[0] != '\0') {
+                cJSON_AddStringToObject(item, "vendor", vendor);
+            }
+        }
+        cJSON* svc = cJSON_AddArrayToObject(item, "services");
+        for (uint8_t s = 0; s < d.service_count; ++s) {
+            char uuid[7] = {};
+            snprintf(uuid, sizeof(uuid), "0x%04X", d.services[s]);
+            cJSON_AddItemToArray(svc, cJSON_CreateString(uuid));
+        }
+        cJSON_AddItemToArray(list, item);
+    }
+    return sendJson(req, doc);
+}
+
 esp_err_t endpointsHandler(httpd_req_t* req) {
     auto* ctx = static_cast<ApiContext*>(req->user_ctx);
     if (!ctx->rest->authorize(req)) {
@@ -879,6 +975,7 @@ esp_err_t endpointsHandler(httpd_req_t* req) {
         {"GET", "/api/v1/files/read?path=/fs/...", "Read a text file"},
         {"GET", "/api/v1/i2c/scan", "Scan the I2C bus"},
         {"GET", "/api/v1/wifi/scan?band=both", "Scan WiFi networks (2.4/5/both)"},
+        {"GET", "/api/v1/ble/scan?ms=3000", "Scan for BLE devices"},
         {"GET", "/api/v1/config?namespace=system", "Read a config namespace"},
         {"PUT", "/api/v1/config", "Update config namespace values"},
         {"POST", "/api/v1/system/reboot", "Reboot the device"},
@@ -949,6 +1046,11 @@ Status registerApiRoutes(ApiContext& ctx) {
     }
     status = ctx.rest->registerRoute(HTTP_GET, "/api/v1/wifi/scan",
                                      &wifiScanHandler, &ctx);
+    if (!status.ok()) {
+        return status;
+    }
+    status = ctx.rest->registerRoute(HTTP_GET, "/api/v1/ble/scan",
+                                     &bleScanHandler, &ctx);
     if (!status.ok()) {
         return status;
     }

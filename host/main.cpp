@@ -8,6 +8,7 @@
 
 #include "gallus/kernel.hpp"
 #include "gallus/sdk/module_manager.hpp"
+#include "gallus/services/ble_service.hpp"
 #include "gallus/services/config_service.hpp"
 #include "gallus/services/gpio_service.hpp"
 #include "gallus/services/i2c_service.hpp"
@@ -92,6 +93,7 @@ int main() {
     static gallus::services::RestService rest(config, kernel.events());
     static gallus::services::I2cService i2c;
     static gallus::services::WifiService wifi(config, kernel.events(), rest);
+    static gallus::services::BleService ble;
 
     if (!kernel.init().ok()) {
         std::fprintf(stderr, "host sim: kernel init failed\n");
@@ -116,6 +118,7 @@ int main() {
     static gallus::sdk::ModuleContext module_ctx = {
         kernel.events(), kernel.scheduler(), config, storage,
         gpio,            rest,               i2c,    wifi,
+        ble,
     };
     static gallus::sdk::ModuleManager modules(module_ctx);
 

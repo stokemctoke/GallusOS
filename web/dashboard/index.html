@@ -444,6 +444,11 @@ const MOD_SETTINGS = {
   hello_world: [
     { key: "message", label: "Greeting message", type: "text" },
     { key: "period_s", label: "Heartbeat interval (seconds)", type: "number" }
+  ],
+  ble_scan: [
+    { key: "auto_start", label: "Auto-start at boot", type: "bool" },
+    { key: "period_ms", label: "Background interval (ms, 0 = on-demand only)", type: "number" },
+    { key: "duration_ms", label: "Scan window (ms, max 10000)", type: "number" }
   ]
 };
 
@@ -562,6 +567,18 @@ function renderModControls() {
       '<div class="mod-detail-tools"><button id="i2cScanBtn">Scan now</button></div>' +
       '<div id="i2cScanOut"></div>';
     $("i2cScanBtn").onclick = runI2cScan;
+    return;
+  }
+  if (mod.name === "ble_scan") {
+    $("modControls").innerHTML =
+      '<p class="muted">Scan for nearby Bluetooth LE devices. Click a row for detail. ' +
+      'The C5 is BLE-only (no Bluetooth Classic).</p>' +
+      '<div class="mod-detail-tools">' +
+      '<select id="bleScanMs"><option value="3000">3 s</option>' +
+      '<option value="5000">5 s</option><option value="8000">8 s</option></select>' +
+      '<button id="bleScanBtn">Scan now</button></div>' +
+      '<div id="bleScanOut"></div>';
+    $("bleScanBtn").onclick = runBleScan;
     return;
   }
   if (mod.name === "system_info") {
@@ -776,6 +793,69 @@ async function runWifiScan() {
     $("wifiScanOut").innerHTML = '<div class="muted">Scan failed.</div>';
   } finally {
     clearScanBusy("wifiScanBtn");
+  }
+}
+
+let bleScanResults = [];
+
+function bleDetailHtml(d) {
+  const caps = [];
+  if (d.connectable) caps.push("connectable");
+  if (d.tx_power !== undefined) caps.push("TX " + d.tx_power + " dBm");
+  let vendor = d.vendor || "";
+  if (d.company_id !== undefined) {
+    const hex = "0x" + Number(d.company_id).toString(16).toUpperCase().padStart(4, "0");
+    vendor = vendor ? vendor + " (" + hex + ")" : hex;
+  }
+  return '<div class="ap-detail">' +
+    apDetailRow("Address", d.address + " (" + (d.address_type || "?") + ")") +
+    apDetailRow("Name", d.name) +
+    apDetailRow("Vendor", vendor) +
+    apDetailRow("Signal", d.rssi + " dBm") +
+    apDetailRow("Flags", caps.join(", ")) +
+    apDetailRow("Services", (d.services && d.services.length)
+      ? d.services.join(", ") : "") +
+    '</div>';
+}
+
+function toggleBleDetail(idx) {
+  const row = $("bled_" + idx);
+  if (!row) return;
+  const open = row.style.display !== "none";
+  row.style.display = open ? "none" : "";
+  const caret = $("blec_" + idx);
+  if (caret) caret.textContent = open ? "▸" : "▾";
+}
+
+async function runBleScan() {
+  const ms = $("bleScanMs") ? $("bleScanMs").value : "3000";
+  showScanBusy("bleScanOut", "bleScanBtn", "Scanning Bluetooth…");
+  try {
+    const d = await apiFetch("/api/v1/ble/scan?ms=" + encodeURIComponent(ms))
+      .then(r => r.json());
+    if (!d.devices || !d.devices.length) {
+      $("bleScanOut").innerHTML = '<div class="muted">No BLE devices found.</div>';
+      return;
+    }
+    bleScanResults = d.devices;
+    $("bleScanOut").innerHTML =
+      '<table><tr><th></th><th>Name / Address</th><th>Vendor</th><th>RSSI</th></tr>' +
+      d.devices.map((n, i) =>
+        '<tr class="ble-row linkish" data-idx="' + i + '">' +
+        '<td><span id="blec_' + i + '">▸</span></td>' +
+        '<td>' + esc(n.name || n.address) + '</td>' +
+        '<td>' + esc(n.vendor || "") + '</td>' +
+        '<td>' + esc(n.rssi) + '</td></tr>' +
+        '<tr class="ap-detail-row" id="bled_' + i + '" style="display:none">' +
+        '<td></td><td colspan="3">' + bleDetailHtml(n) + '</td></tr>'
+      ).join("") + '</table>';
+    $("bleScanOut").querySelectorAll(".ble-row").forEach(el => {
+      el.onclick = () => toggleBleDetail(el.dataset.idx);
+    });
+  } catch (e) {
+    $("bleScanOut").innerHTML = '<div class="muted">Scan failed.</div>';
+  } finally {
+    clearScanBusy("bleScanBtn");
   }
 }
 

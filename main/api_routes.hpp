@@ -3,6 +3,7 @@
 #include "gallus/kernel.hpp"
 #include "gallus/sdk/module_manager.hpp"
 #include "gallus/services/battery_service.hpp"
+#include "gallus/services/ble_service.hpp"
 #include "gallus/services/config_service.hpp"
 #include "gallus/services/diagnostics_service.hpp"
 #include "gallus/services/power_mode_service.hpp"
@@ -28,6 +29,7 @@ struct ApiContext {
     services::BatteryService* battery;
     services::PowerModeService* power;
     services::WifiService* wifi;
+    services::BleService* ble;
     Kernel* kernel;
 };
 

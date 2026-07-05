@@ -15,6 +15,7 @@ set(HOST_MODULES
     i2c_scanner
     system_info
     wifi_scan
+    ble_scan
 )
 
 set(HOST_MODULE_SOURCES "")
@@ -77,6 +78,7 @@ add_library(gallus_host_services STATIC
     mock/i2c_bus.cpp
     mock/gpio.cpp
     mock/wifi_service.cpp
+    mock/ble_service.cpp
     ${GALLUS_ROOT}/components/gallus_services/src/config_service.cpp
     ${GALLUS_ROOT}/components/gallus_services/src/gpio_service.cpp
 )

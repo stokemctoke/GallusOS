@@ -3,6 +3,44 @@
 All notable changes to GallusOS are documented here. The project follows
 [Semantic Versioning](https://semver.org/) for firmware and module manifests.
 
+## [0.1.3] — 2026-07-05
+
+Security follow-up to v0.1.2, driven by a field report that the API token
+behaved inconsistently across browsers. Investigation ([issues #18–#25](https://github.com/stokemctoke/GallusOS/issues?q=is%3Aissue+is%3Aclosed))
+found a root-cause auth bug and a remotely-triggerable XSS.
+
+### Security
+
+- **API token now enforced immediately** — `RestService` subscribes to
+  `ConfigChanged` and reloads the token on any write. Previously a saved token
+  was persisted to flash but not enforced until the next reboot, leaving the
+  API open in the meantime. (#18)
+- **Dashboard XSS fixed** — device-supplied strings (WiFi SSIDs, file names,
+  module metadata, config values) were rendered into `innerHTML` unescaped. A
+  nearby AP with an HTML/script SSID could steal the API token from
+  `localStorage` or drive authenticated actions (including OTA) the moment an
+  operator ran a WiFi scan. All such values are now HTML-escaped, and the file
+  list uses data-attributes + a delegated handler instead of inline `onclick`. (#24)
+- **Constant-time token comparison** — the token is compared with an
+  XOR-accumulating fixed-length check instead of `strcmp`, closing a timing
+  side-channel. Over-length credentials are rejected rather than truncate-matched. (#25)
+
+### Dashboard token UX
+
+- **Confirmation field** — the API token must be entered twice (and match a
+  URL-safe charset, max 63 chars) before saving, so a typo can't lock out every
+  client. (#23)
+- **Explicit Clear-token button** — a blank re-save no longer silently disables
+  auth; clearing the token is now a deliberate, confirmed action. (#19)
+- **Reboot button** reports real failures instead of always showing
+  "Rebooting…" (it now checks the response). (#20)
+- **WebSocket reconnect** uses exponential backoff and stops once a token is
+  required but not held, ending the device-log reject storm. (#21)
+- **OTA upload** surfaces a 401 as a token prompt rather than a generic
+  firmware error. (#22)
+
+[0.1.3]: https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.3
+
 ## [0.1.2] — 2026-07-04
 
 Hardening release: every finding from the July 2026 full-codebase review fixed

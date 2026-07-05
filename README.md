@@ -5,7 +5,7 @@
 
 # GallusOS: A Modular Embedded Operating Environment
 
-**Current release:** [v0.1.2](https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.2) — hardening release: all 17 findings from the full codebase review fixed (auth-aware dashboard, WebSocket token auth, kernel/scheduler lifecycle fixes, provisioning robustness).
+**Current release:** [v0.1.3](https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.3) — security follow-up: API token now enforced without a reboot, dashboard XSS fixed, token confirmation field, and constant-time token comparison.
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 

@@ -5,6 +5,7 @@
 #include "gallus/services/battery_service.hpp"
 #include "gallus/services/ble_service.hpp"
 #include "gallus/services/config_service.hpp"
+#include "gallus/services/ieee802154_service.hpp"
 #include "gallus/services/diagnostics_service.hpp"
 #include "gallus/services/power_mode_service.hpp"
 #include "gallus/services/gpio_service.hpp"
@@ -30,6 +31,7 @@ struct ApiContext {
     services::PowerModeService* power;
     services::WifiService* wifi;
     services::BleService* ble;
+    services::Ieee802154Service* ieee802154;
     Kernel* kernel;
 };
 

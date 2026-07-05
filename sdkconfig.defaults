@@ -41,3 +41,7 @@ CONFIG_BT_NIMBLE_ROLE_CENTRAL=y
 # CONFIG_BT_NIMBLE_ROLE_BROADCASTER is not set
 # WiFi/BLE coexistence so scanning never drops the dashboard's STA link.
 CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
+
+# IEEE 802.15.4 (Zigbee/Thread/Matter PHY) — brought up on demand by
+# Ieee802154Service for passive channel + network discovery.
+CONFIG_IEEE802154_ENABLED=y

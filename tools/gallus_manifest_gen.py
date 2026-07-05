@@ -23,7 +23,7 @@ VALID_CATEGORIES = {
 KNOWN_SERVICES = {
     "events", "scheduler", "logging", "config", "storage", "gpio",
     "wifi", "network", "time", "rest", "display", "battery", "ota", "i2c",
-    "ble",
+    "ble", "ieee802154",
 }
 
 REQUIRED_FIELDS = {

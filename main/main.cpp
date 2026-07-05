@@ -84,6 +84,7 @@ extern "C" void app_main(void) {
     static gallus::services::RestService rest(config, kernel.events());
     static gallus::services::WifiService wifi(config, kernel.events(), rest);
     static gallus::services::BleService ble;
+    static gallus::services::Ieee802154Service ieee802154;
     static gallus::services::NetworkService network(config, kernel.events());
     static gallus::services::TimeService time_service(kernel.events());
     static gallus::services::DisplayService display(
@@ -135,7 +136,7 @@ extern "C" void app_main(void) {
     // Modules: everything the manifest codegen registered at build time.
     static gallus::sdk::ModuleContext module_ctx = {
         kernel.events(), kernel.scheduler(), config, storage, gpio, rest, i2c,
-        wifi, ble,
+        wifi, ble, ieee802154,
     };
     static gallus::sdk::ModuleManager modules(module_ctx);
     static ModuleHookCtx module_hooks = {.modules = &modules};
@@ -149,8 +150,9 @@ extern "C" void app_main(void) {
     check("power mode init", power_mode.init());
 
     static gallus::app::ApiContext api_ctx = {
-        &rest,     &config,  &diagnostics, &gpio,       &storage, &i2c,
-        &modules,  &battery, &power_mode,  &wifi,       &ble,     &kernel};
+        &rest,    &config,  &diagnostics, &gpio,        &storage,
+        &i2c,     &modules, &battery,     &power_mode,  &wifi,
+        &ble,     &ieee802154, &kernel};
     check("api routes", gallus::app::registerApiRoutes(api_ctx));
 
     check("ota init", ota.init());

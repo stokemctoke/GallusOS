@@ -1,0 +1,7 @@
+{
+  "ieee802154_scan": {
+    "auto_start": false,
+    "period_ms": 0,
+    "dwell_ms": 120
+  }
+}

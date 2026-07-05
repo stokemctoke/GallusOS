@@ -449,6 +449,11 @@ const MOD_SETTINGS = {
     { key: "auto_start", label: "Auto-start at boot", type: "bool" },
     { key: "period_ms", label: "Background interval (ms, 0 = on-demand only)", type: "number" },
     { key: "duration_ms", label: "Scan window (ms, max 10000)", type: "number" }
+  ],
+  ieee802154_scan: [
+    { key: "auto_start", label: "Auto-start at boot", type: "bool" },
+    { key: "period_ms", label: "Background interval (ms, 0 = on-demand only)", type: "number" },
+    { key: "dwell_ms", label: "Per-channel dwell (ms, max 500)", type: "number" }
   ]
 };
 
@@ -579,6 +584,21 @@ function renderModControls() {
       '<button id="bleScanBtn">Scan now</button></div>' +
       '<div id="bleScanOut"></div>';
     $("bleScanBtn").onclick = runBleScan;
+    return;
+  }
+  if (mod.name === "ieee802154_scan") {
+    $("modControls").innerHTML =
+      '<p class="muted">Survey the 16 IEEE 802.15.4 channels (Zigbee / Thread / ' +
+      'Matter). Shows per-channel energy and any networks (PAN IDs) and devices ' +
+      'heard. Click a channel for detail. Payloads are encrypted — this reports ' +
+      'presence, not traffic.</p>' +
+      '<div class="mod-detail-tools">' +
+      '<select id="ieeeDwell"><option value="120">Fast (120 ms/ch)</option>' +
+      '<option value="250">Thorough (250 ms/ch)</option>' +
+      '<option value="500">Deep (500 ms/ch)</option></select>' +
+      '<button id="ieeeScanBtn">Survey now</button></div>' +
+      '<div id="ieeeScanOut"></div>';
+    $("ieeeScanBtn").onclick = runIeeeScan;
     return;
   }
   if (mod.name === "system_info") {
@@ -856,6 +876,66 @@ async function runBleScan() {
     $("bleScanOut").innerHTML = '<div class="muted">Scan failed.</div>';
   } finally {
     clearScanBusy("bleScanBtn");
+  }
+}
+
+let ieeeScanResults = [];
+
+function ieeeDetailHtml(c) {
+  return '<div class="ap-detail">' +
+    apDetailRow("Channel", c.channel + " (2.4 GHz)") +
+    apDetailRow("Energy", c.energy_dbm !== undefined ? c.energy_dbm + " dBm" : "") +
+    apDetailRow("Best RSSI", c.rssi !== undefined ? c.rssi + " dBm" : "") +
+    apDetailRow("Frames captured", c.frames) +
+    apDetailRow("Networks (PAN IDs)", (c.pans && c.pans.length) ? c.pans.join(", ") : "") +
+    apDetailRow("Devices", (c.devices && c.devices.length) ? c.devices.join(", ") : "") +
+    apDetailRow("Frame types", (c.frame_types && c.frame_types.length)
+      ? c.frame_types.join(", ") : "") +
+    '</div>';
+}
+
+function toggleIeeeDetail(idx) {
+  const row = $("ieed_" + idx);
+  if (!row) return;
+  const open = row.style.display !== "none";
+  row.style.display = open ? "none" : "";
+  const caret = $("ieec_" + idx);
+  if (caret) caret.textContent = open ? "▸" : "▾";
+}
+
+async function runIeeeScan() {
+  const ms = $("ieeeDwell") ? $("ieeeDwell").value : "120";
+  showScanBusy("ieeeScanOut", "ieeeScanBtn", "Surveying 802.15.4 channels…");
+  try {
+    const d = await apiFetch("/api/v1/ieee802154/scan?ms=" + encodeURIComponent(ms))
+      .then(r => r.json());
+    const chans = (d.channels || []).filter(c =>
+      c.frames > 0 || (c.pans && c.pans.length) || c.energy_dbm !== undefined);
+    if (!chans.length) {
+      $("ieeeScanOut").innerHTML =
+        '<div class="muted">No 802.15.4 activity detected.</div>';
+      return;
+    }
+    ieeeScanResults = chans;
+    $("ieeeScanOut").innerHTML =
+      '<table><tr><th></th><th>Ch</th><th>Energy</th><th>Frames</th><th>Networks</th></tr>' +
+      chans.map((c, i) =>
+        '<tr class="ieee-row linkish" data-idx="' + i + '">' +
+        '<td><span id="ieec_' + i + '">▸</span></td>' +
+        '<td>' + esc(c.channel) + '</td>' +
+        '<td>' + esc(c.energy_dbm !== undefined ? c.energy_dbm + " dBm" : "—") + '</td>' +
+        '<td>' + esc(c.frames || 0) + '</td>' +
+        '<td>' + esc((c.pans && c.pans.length) ? c.pans.join(" ") : "—") + '</td></tr>' +
+        '<tr class="ap-detail-row" id="ieed_' + i + '" style="display:none">' +
+        '<td></td><td colspan="4">' + ieeeDetailHtml(c) + '</td></tr>'
+      ).join("") + '</table>';
+    $("ieeeScanOut").querySelectorAll(".ieee-row").forEach(el => {
+      el.onclick = () => toggleIeeeDetail(el.dataset.idx);
+    });
+  } catch (e) {
+    $("ieeeScanOut").innerHTML = '<div class="muted">Survey failed.</div>';
+  } finally {
+    clearScanBusy("ieeeScanBtn");
   }
 }
 

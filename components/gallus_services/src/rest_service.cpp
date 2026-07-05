@@ -1,5 +1,6 @@
 #include "gallus/services/rest_service.hpp"
 
+#include <cstdio>
 #include <cstring>
 
 #include "gallus/log.hpp"
@@ -8,6 +9,18 @@ namespace gallus::services {
 
 namespace {
 constexpr const char* kTag = "REST";
+
+// Constant-time equality over a fixed length: compares every byte of
+// two NUL-terminated, zero-padded buffers so the running time does not
+// depend on how many leading bytes match (no early-exit like strcmp).
+bool constantTimeEqual(const char* a, const char* b, size_t n) {
+    unsigned char diff = 0;
+    for (size_t i = 0; i < n; ++i) {
+        diff |= static_cast<unsigned char>(a[i]) ^
+                static_cast<unsigned char>(b[i]);
+    }
+    return diff == 0;
+}
 }
 
 Status RestService::init() {
@@ -123,8 +136,21 @@ bool RestService::bearerAuthorized(httpd_req_t* req) const {
         return false;
     }
     const char* kPrefix = "Bearer ";
-    return strncmp(header, kPrefix, strlen(kPrefix)) == 0 &&
-           strcmp(header + strlen(kPrefix), token_) == 0;
+    if (strncmp(header, kPrefix, strlen(kPrefix)) != 0) {
+        return false;
+    }
+    // Compare in constant time over the full token buffer: copy the
+    // candidate into a fixed zero-padded buffer so every byte read is
+    // in-bounds and the timing does not leak the match length. The
+    // buffer is one byte larger than token_ so a presented token longer
+    // than the stored one keeps a non-NUL at index sizeof(token_)-1 and
+    // is rejected (rather than truncate-matching a max-length token).
+    const char* presented = header + strlen(kPrefix);
+    char candidate[sizeof(token_) + 1] = {};
+    for (size_t i = 0; i < sizeof(candidate) - 1 && presented[i] != '\0'; ++i) {
+        candidate[i] = presented[i];
+    }
+    return constantTimeEqual(candidate, token_, sizeof(token_));
 }
 
 bool RestService::authorize(httpd_req_t* req) const {
@@ -156,7 +182,7 @@ bool RestService::authorizeWs(httpd_req_t* req) const {
     if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
         httpd_query_key_value(query, "token", token, sizeof(token)) ==
             ESP_OK &&
-        strcmp(token, token_) == 0) {
+        constantTimeEqual(token, token_, sizeof(token_))) {
         return true;
     }
     return false;

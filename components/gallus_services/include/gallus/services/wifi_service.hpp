@@ -73,14 +73,38 @@ public:
         Both = 2,
     };
 
-    /// One AP entry from a scan.
+    /// One AP entry from a scan. Enum fields hold the raw ESP-IDF
+    /// values (wifi_auth_mode_t, wifi_cipher_type_t, …) cast to
+    /// uint8_t; the REST layer maps them to human-readable strings.
     struct ApRecord {
         char ssid[33];
         uint8_t bssid[6];
         int8_t rssi;
         uint8_t channel;
-        uint8_t band_ghz;  ///< 2 or 5
+        uint8_t band_ghz;         ///< 2 or 5
+        uint8_t authmode;         ///< wifi_auth_mode_t
+        uint8_t pairwise_cipher;  ///< wifi_cipher_type_t
+        uint8_t group_cipher;     ///< wifi_cipher_type_t
+        uint8_t second;           ///< wifi_second_chan_t (0 none,1 above,2 below)
+        uint8_t bandwidth;        ///< wifi_bandwidth_t
+        uint8_t phy_flags;        ///< bit0 b,1 g,2 n,3 a,4 ac,5 ax,6 lr
+        uint8_t caps;             ///< bit0 wps,1 ftm_responder,2 ftm_initiator
+        char country[4];          ///< regulatory code, e.g. "US" ("" if none)
     };
+
+    // Bit positions for ApRecord::phy_flags.
+    static constexpr uint8_t kPhy11b = 1 << 0;
+    static constexpr uint8_t kPhy11g = 1 << 1;
+    static constexpr uint8_t kPhy11n = 1 << 2;
+    static constexpr uint8_t kPhy11a = 1 << 3;
+    static constexpr uint8_t kPhy11ac = 1 << 4;
+    static constexpr uint8_t kPhy11ax = 1 << 5;
+    static constexpr uint8_t kPhyLr = 1 << 6;
+
+    // Bit positions for ApRecord::caps.
+    static constexpr uint8_t kCapWps = 1 << 0;
+    static constexpr uint8_t kCapFtmResponder = 1 << 1;
+    static constexpr uint8_t kCapFtmInitiator = 1 << 2;
 
     static constexpr size_t kMaxScanResults = 32;
 

@@ -1,6 +1,7 @@
 #include "gallus/services/wifi_service.hpp"
 
 #include <cstdio>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 
@@ -260,6 +261,37 @@ void copyApRecord(WifiService::ApRecord* dst, const wifi_ap_record_t& src,
     dst->channel = src.primary;
     dst->band_ghz = band_ghz != 0 ? band_ghz
                                   : (channelIs5G(src.primary) ? 5 : 2);
+
+    dst->authmode = static_cast<uint8_t>(src.authmode);
+    dst->pairwise_cipher = static_cast<uint8_t>(src.pairwise_cipher);
+    dst->group_cipher = static_cast<uint8_t>(src.group_cipher);
+    dst->second = static_cast<uint8_t>(src.second);
+    dst->bandwidth = static_cast<uint8_t>(src.bandwidth);
+
+    dst->phy_flags = static_cast<uint8_t>(
+        (src.phy_11b ? WifiService::kPhy11b : 0) |
+        (src.phy_11g ? WifiService::kPhy11g : 0) |
+        (src.phy_11n ? WifiService::kPhy11n : 0) |
+        (src.phy_11a ? WifiService::kPhy11a : 0) |
+        (src.phy_11ac ? WifiService::kPhy11ac : 0) |
+        (src.phy_11ax ? WifiService::kPhy11ax : 0) |
+        (src.phy_lr ? WifiService::kPhyLr : 0));
+    dst->caps = static_cast<uint8_t>(
+        (src.wps ? WifiService::kCapWps : 0) |
+        (src.ftm_responder ? WifiService::kCapFtmResponder : 0) |
+        (src.ftm_initiator ? WifiService::kCapFtmInitiator : 0));
+
+    // Country code: two ASCII letters when present, else empty.
+    const char c0 = src.country.cc[0];
+    const char c1 = src.country.cc[1];
+    if (std::isalpha(static_cast<unsigned char>(c0)) &&
+        std::isalpha(static_cast<unsigned char>(c1))) {
+        dst->country[0] = c0;
+        dst->country[1] = c1;
+        dst->country[2] = '\0';
+    } else {
+        dst->country[0] = '\0';
+    }
 }
 
 enum class BandFilter : uint8_t {

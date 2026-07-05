@@ -11,6 +11,7 @@
 #include "esp_netif_ip_addr.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "esp_wifi_types.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -674,6 +675,96 @@ esp_err_t i2cScanHandler(httpd_req_t* req) {
     return sendJson(req, doc);
 }
 
+const char* authModeName(uint8_t mode) {
+    switch (mode) {
+        case WIFI_AUTH_OPEN:            return "Open";
+        case WIFI_AUTH_WEP:             return "WEP";
+        case WIFI_AUTH_WPA_PSK:         return "WPA-PSK";
+        case WIFI_AUTH_WPA2_PSK:        return "WPA2-PSK";
+        case WIFI_AUTH_WPA_WPA2_PSK:    return "WPA/WPA2-PSK";
+        case WIFI_AUTH_ENTERPRISE:      return "WPA2-Enterprise";
+        case WIFI_AUTH_WPA3_PSK:        return "WPA3-PSK";
+        case WIFI_AUTH_WPA2_WPA3_PSK:   return "WPA2/WPA3-PSK";
+        case WIFI_AUTH_WAPI_PSK:        return "WAPI-PSK";
+        case WIFI_AUTH_OWE:             return "OWE";
+        case WIFI_AUTH_WPA3_ENT_192:    return "WPA3-Enterprise-192";
+        default:                        return "unknown";
+    }
+}
+
+const char* cipherName(uint8_t cipher) {
+    switch (cipher) {
+        case WIFI_CIPHER_TYPE_NONE:        return "none";
+        case WIFI_CIPHER_TYPE_WEP40:       return "WEP-40";
+        case WIFI_CIPHER_TYPE_WEP104:      return "WEP-104";
+        case WIFI_CIPHER_TYPE_TKIP:        return "TKIP";
+        case WIFI_CIPHER_TYPE_CCMP:        return "CCMP";
+        case WIFI_CIPHER_TYPE_TKIP_CCMP:   return "TKIP+CCMP";
+        case WIFI_CIPHER_TYPE_AES_CMAC128: return "AES-CMAC-128";
+        case WIFI_CIPHER_TYPE_SMS4:        return "SMS4";
+        case WIFI_CIPHER_TYPE_GCMP:        return "GCMP";
+        case WIFI_CIPHER_TYPE_GCMP256:     return "GCMP-256";
+        default:                           return "unknown";
+    }
+}
+
+const char* secondChanName(uint8_t second) {
+    switch (second) {
+        case WIFI_SECOND_CHAN_NONE:  return "none";
+        case WIFI_SECOND_CHAN_ABOVE: return "above";
+        case WIFI_SECOND_CHAN_BELOW: return "below";
+        default:                     return "none";
+    }
+}
+
+int bandwidthMhz(uint8_t bw) {
+    switch (bw) {
+        case WIFI_BW_HT20: return 20;
+        case WIFI_BW_HT40: return 40;
+#ifdef WIFI_BW80
+        case WIFI_BW80:    return 80;
+#endif
+#ifdef WIFI_BW160
+        case WIFI_BW160:   return 160;
+#endif
+        default:           return 0;
+    }
+}
+
+/// Highest 802.11 generation the AP advertised, from the PHY bits.
+const char* phyGeneration(uint8_t phy) {
+    using Ap = services::WifiService;
+    if (phy & Ap::kPhy11ax) return "Wi-Fi 6 (802.11ax)";
+    if (phy & Ap::kPhy11ac) return "Wi-Fi 5 (802.11ac)";
+    if (phy & Ap::kPhy11n)  return "Wi-Fi 4 (802.11n)";
+    if (phy & Ap::kPhy11a)  return "802.11a";
+    if (phy & Ap::kPhy11g)  return "802.11g";
+    if (phy & Ap::kPhy11b)  return "802.11b";
+    return "unknown";
+}
+
+/// Compact standards list, e.g. "b/g/n/ax".
+void phyStandards(uint8_t phy, char* out, size_t cap) {
+    using Ap = services::WifiService;
+    out[0] = '\0';
+    const struct { uint8_t bit; const char* name; } kBits[] = {
+        {Ap::kPhy11b, "b"}, {Ap::kPhy11g, "g"}, {Ap::kPhy11n, "n"},
+        {Ap::kPhy11a, "a"}, {Ap::kPhy11ac, "ac"}, {Ap::kPhy11ax, "ax"},
+    };
+    size_t len = 0;
+    for (const auto& e : kBits) {
+        if (!(phy & e.bit)) {
+            continue;
+        }
+        const int w = snprintf(out + len, cap - len, "%s%s",
+                               len ? "/" : "", e.name);
+        if (w <= 0 || static_cast<size_t>(w) >= cap - len) {
+            break;
+        }
+        len += static_cast<size_t>(w);
+    }
+}
+
 esp_err_t wifiScanHandler(httpd_req_t* req) {
     auto* ctx = static_cast<ApiContext*>(req->user_ctx);
     if (!ctx->rest->authorize(req)) {
@@ -699,10 +790,16 @@ esp_err_t wifiScanHandler(httpd_req_t* req) {
         bands = services::WifiService::ScanBand::Band2G;
     }
 
-    services::WifiService::ApRecord records
-        [services::WifiService::kMaxScanResults];
-    const auto found = ctx->wifi->scan(
-        records, sizeof(records) / sizeof(records[0]), bands);
+    // Heap-allocated: the record struct is large enough that a full
+    // kMaxScanResults array does not belong on the httpd task stack.
+    constexpr size_t kMax = services::WifiService::kMaxScanResults;
+    std::unique_ptr<services::WifiService::ApRecord[]> records(
+        new (std::nothrow) services::WifiService::ApRecord[kMax]);
+    if (records == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "out of memory");
+    }
+    const auto found = ctx->wifi->scan(records.get(), kMax, bands);
     if (!found.ok()) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
                                    found.message());
@@ -722,6 +819,36 @@ esp_err_t wifiScanHandler(httpd_req_t* req) {
                  ap.bssid[0], ap.bssid[1], ap.bssid[2], ap.bssid[3],
                  ap.bssid[4], ap.bssid[5]);
         cJSON_AddStringToObject(item, "bssid", bssid);
+
+        // Vendor OUI (first 3 BSSID bytes) — the client can map this
+        // to a manufacturer if it wants; we don't ship an OUI table.
+        char oui[9] = {};
+        snprintf(oui, sizeof(oui), "%02X:%02X:%02X", ap.bssid[0], ap.bssid[1],
+                 ap.bssid[2]);
+        cJSON_AddStringToObject(item, "oui", oui);
+
+        cJSON_AddStringToObject(item, "security", authModeName(ap.authmode));
+        cJSON_AddBoolToObject(item, "open", ap.authmode == WIFI_AUTH_OPEN);
+        cJSON_AddStringToObject(item, "pairwise_cipher",
+                                cipherName(ap.pairwise_cipher));
+        cJSON_AddStringToObject(item, "group_cipher",
+                                cipherName(ap.group_cipher));
+        cJSON_AddStringToObject(item, "generation", phyGeneration(ap.phy_flags));
+        char standards[24] = {};
+        phyStandards(ap.phy_flags, standards, sizeof(standards));
+        cJSON_AddStringToObject(item, "standards", standards);
+        cJSON_AddNumberToObject(item, "bandwidth_mhz",
+                                bandwidthMhz(ap.bandwidth));
+        cJSON_AddStringToObject(item, "second", secondChanName(ap.second));
+        cJSON_AddBoolToObject(item, "wps",
+                              (ap.caps & services::WifiService::kCapWps) != 0);
+        cJSON_AddBoolToObject(
+            item, "ftm_responder",
+            (ap.caps & services::WifiService::kCapFtmResponder) != 0);
+        cJSON_AddBoolToObject(
+            item, "ftm_initiator",
+            (ap.caps & services::WifiService::kCapFtmInitiator) != 0);
+        cJSON_AddStringToObject(item, "country", ap.country);
         cJSON_AddItemToArray(list, item);
     }
     return sendJson(req, doc);

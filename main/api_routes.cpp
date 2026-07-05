@@ -950,6 +950,84 @@ esp_err_t bleScanHandler(httpd_req_t* req) {
     return sendJson(req, doc);
 }
 
+esp_err_t ieee802154ScanHandler(httpd_req_t* req) {
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (!ctx->rest->authorize(req)) {
+        return ESP_OK;
+    }
+    if (ctx->ieee802154 == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "802.15.4 not available");
+    }
+
+    uint32_t dwell_ms = services::Ieee802154Service::kDefaultDwellMs;
+    char query[32] = {};
+    char ms_query[8] = {};
+    if (httpd_req_get_url_query_len(req) + 1 <= sizeof(query) &&
+        httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
+        httpd_query_key_value(query, "ms", ms_query, sizeof(ms_query)) ==
+            ESP_OK) {
+        const int v = atoi(ms_query);
+        if (v > 0) {
+            dwell_ms = static_cast<uint32_t>(v);
+        }
+    }
+
+    using Svc = services::Ieee802154Service;
+    std::unique_ptr<Svc::ChannelRecord[]> records(
+        new (std::nothrow) Svc::ChannelRecord[Svc::kChannelCount]);
+    if (records == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "out of memory");
+    }
+    const auto found =
+        ctx->ieee802154->scan(records.get(), Svc::kChannelCount, dwell_ms);
+    if (!found.ok()) {
+        const char* msg = found.error() == Error::Busy
+                              ? "a survey is already running"
+                              : found.message();
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, msg);
+    }
+
+    cJSON* doc = cJSON_CreateObject();
+    cJSON* list = cJSON_AddArrayToObject(doc, "channels");
+    for (size_t i = 0; i < found.value(); ++i) {
+        const auto& c = records[i];
+        cJSON* item = cJSON_CreateObject();
+        cJSON_AddNumberToObject(item, "channel", c.channel);
+        if (c.energy_dbm != -128) {
+            cJSON_AddNumberToObject(item, "energy_dbm", c.energy_dbm);
+        }
+        cJSON_AddNumberToObject(item, "frames", c.frames);
+        if (c.best_rssi != -128) {
+            cJSON_AddNumberToObject(item, "rssi", c.best_rssi);
+        }
+        cJSON* pans = cJSON_AddArrayToObject(item, "pans");
+        for (uint8_t p = 0; p < c.pan_count; ++p) {
+            char id[7] = {};
+            snprintf(id, sizeof(id), "0x%04X", c.pans[p]);
+            cJSON_AddItemToArray(pans, cJSON_CreateString(id));
+        }
+        cJSON* devs = cJSON_AddArrayToObject(item, "devices");
+        for (uint8_t v = 0; v < c.device_count; ++v) {
+            char a[7] = {};
+            snprintf(a, sizeof(a), "0x%04X", c.devices[v]);
+            cJSON_AddItemToArray(devs, cJSON_CreateString(a));
+        }
+        cJSON* types = cJSON_AddArrayToObject(item, "frame_types");
+        if (c.frame_types & Svc::kTypeBeacon)
+            cJSON_AddItemToArray(types, cJSON_CreateString("beacon"));
+        if (c.frame_types & Svc::kTypeData)
+            cJSON_AddItemToArray(types, cJSON_CreateString("data"));
+        if (c.frame_types & Svc::kTypeAck)
+            cJSON_AddItemToArray(types, cJSON_CreateString("ack"));
+        if (c.frame_types & Svc::kTypeCommand)
+            cJSON_AddItemToArray(types, cJSON_CreateString("command"));
+        cJSON_AddItemToArray(list, item);
+    }
+    return sendJson(req, doc);
+}
+
 esp_err_t endpointsHandler(httpd_req_t* req) {
     auto* ctx = static_cast<ApiContext*>(req->user_ctx);
     if (!ctx->rest->authorize(req)) {
@@ -976,6 +1054,8 @@ esp_err_t endpointsHandler(httpd_req_t* req) {
         {"GET", "/api/v1/i2c/scan", "Scan the I2C bus"},
         {"GET", "/api/v1/wifi/scan?band=both", "Scan WiFi networks (2.4/5/both)"},
         {"GET", "/api/v1/ble/scan?ms=3000", "Scan for BLE devices"},
+        {"GET", "/api/v1/ieee802154/scan?ms=120",
+         "Survey 802.15.4 channels (Zigbee/Thread)"},
         {"GET", "/api/v1/config?namespace=system", "Read a config namespace"},
         {"PUT", "/api/v1/config", "Update config namespace values"},
         {"POST", "/api/v1/system/reboot", "Reboot the device"},
@@ -1051,6 +1131,11 @@ Status registerApiRoutes(ApiContext& ctx) {
     }
     status = ctx.rest->registerRoute(HTTP_GET, "/api/v1/ble/scan",
                                      &bleScanHandler, &ctx);
+    if (!status.ok()) {
+        return status;
+    }
+    status = ctx.rest->registerRoute(HTTP_GET, "/api/v1/ieee802154/scan",
+                                     &ieee802154ScanHandler, &ctx);
     if (!status.ok()) {
         return status;
     }

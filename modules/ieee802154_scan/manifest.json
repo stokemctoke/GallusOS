@@ -1,0 +1,14 @@
+{
+  "name": "ieee802154_scan",
+  "version": "0.1.0",
+  "description": "On-demand IEEE 802.15.4 survey (Zigbee/Thread/Matter channels and networks).",
+  "author": "Gallus Gadgets",
+  "license": "PolyForm-Perimeter-1.0.0",
+  "category": "RF",
+  "menu_icon": "radio",
+  "required_services": ["config", "scheduler", "ieee802154"],
+  "required_gpio": [],
+  "events_published": [],
+  "events_consumed": [],
+  "capabilities": ["ieee802154_survey"]
+}

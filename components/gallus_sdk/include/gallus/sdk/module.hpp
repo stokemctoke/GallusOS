@@ -9,6 +9,7 @@
 #include "gallus/services/gpio_service.hpp"
 #include "gallus/services/i2c_service.hpp"
 #include "gallus/services/ble_service.hpp"
+#include "gallus/services/ieee802154_service.hpp"
 #include "gallus/services/rest_service.hpp"
 #include "gallus/services/storage_service.hpp"
 #include "gallus/services/wifi_service.hpp"
@@ -40,6 +41,7 @@ struct ModuleContext {
     services::I2cService& i2c;
     services::WifiService& wifi;
     services::BleService& ble;
+    services::Ieee802154Service& ieee802154;
 };
 
 /// Module metadata, generated from manifest.json at build time.

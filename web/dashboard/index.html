@@ -449,6 +449,10 @@ const MOD_SETTINGS = {
     { key: "auto_start", label: "Auto-start at boot", type: "bool" },
     { key: "period_ms", label: "Background interval (ms, 0 = on-demand only)", type: "number" },
     { key: "duration_ms", label: "Scan window (ms, max 10000)", type: "number" }
+  ],
+  ieee802154_scan: [
+    { key: "auto_start", label: "Auto-start at boot", type: "bool" },
+    { key: "period_ms", label: "Background interval (ms, 0 = on-demand only)", type: "number" }
   ]
 };
 
@@ -579,6 +583,19 @@ function renderModControls() {
       '<button id="bleScanBtn">Scan now</button></div>' +
       '<div id="bleScanOut"></div>';
     $("bleScanBtn").onclick = runBleScan;
+    return;
+  }
+  if (mod.name === "ieee802154_scan") {
+    $("modControls").innerHTML =
+      '<p class="muted">Energy survey of the 16 IEEE 802.15.4 channels ' +
+      '(Zigbee / Thread / Matter). Shows where 2.4 GHz 802.15.4 activity is — ' +
+      'strong energy on channels 15/20/25 points at a nearby Zigbee/Thread ' +
+      'network. Coexists with WiFi (the dashboard stays up). Click a channel ' +
+      'for detail.</p>' +
+      '<div class="mod-detail-tools">' +
+      '<button id="ieeeScanBtn">Survey now</button></div>' +
+      '<div id="ieeeScanOut"></div>';
+    $("ieeeScanBtn").onclick = runIeeeScan;
     return;
   }
   if (mod.name === "system_info") {
@@ -856,6 +873,69 @@ async function runBleScan() {
     $("bleScanOut").innerHTML = '<div class="muted">Scan failed.</div>';
   } finally {
     clearScanBusy("bleScanBtn");
+  }
+}
+
+let ieeeScanResults = [];
+
+function ieeeChannelMhz(ch) { return 2405 + 5 * (ch - 11); }
+
+function ieeeDetailHtml(c) {
+  return '<div class="ap-detail">' +
+    apDetailRow("Channel", c.channel + " · " + ieeeChannelMhz(c.channel) + " MHz") +
+    apDetailRow("Energy", c.energy_dbm !== undefined
+      ? c.energy_dbm + " dBm" : "no reading") +
+    apDetailRow("Note", "Energy survey. Network/device enumeration needs " +
+      "deep-capture mode (disrupts WiFi) — not enabled here.") +
+    '</div>';
+}
+
+function toggleIeeeDetail(idx) {
+  const row = $("ieed_" + idx);
+  if (!row) return;
+  const open = row.style.display !== "none";
+  row.style.display = open ? "none" : "";
+  const caret = $("ieec_" + idx);
+  if (caret) caret.textContent = open ? "▸" : "▾";
+}
+
+function ieeeEnergyBar(e) {
+  // Map -100 dBm (quiet) .. -20 dBm (strong) to 0..100%.
+  if (e === undefined) return 0;
+  return Math.max(0, Math.min(100, Math.round((e + 100) / 80 * 100)));
+}
+
+async function runIeeeScan() {
+  showScanBusy("ieeeScanOut", "ieeeScanBtn", "Surveying 802.15.4 channels…");
+  try {
+    const d = await apiFetch("/api/v1/ieee802154/scan").then(r => r.json());
+    const chans = d.channels || [];
+    if (!chans.length) {
+      $("ieeeScanOut").innerHTML =
+        '<div class="muted">No channel data returned.</div>';
+      return;
+    }
+    ieeeScanResults = chans;
+    $("ieeeScanOut").innerHTML =
+      '<table><tr><th></th><th>Ch</th><th>MHz</th><th>Energy</th><th>Activity</th></tr>' +
+      chans.map((c, i) =>
+        '<tr class="ieee-row linkish" data-idx="' + i + '">' +
+        '<td><span id="ieec_' + i + '">▸</span></td>' +
+        '<td>' + esc(c.channel) + '</td>' +
+        '<td>' + esc(ieeeChannelMhz(c.channel)) + '</td>' +
+        '<td>' + esc(c.energy_dbm !== undefined ? c.energy_dbm + " dBm" : "—") + '</td>' +
+        '<td><div class="bar" style="max-width:140px"><i style="width:' +
+        ieeeEnergyBar(c.energy_dbm) + '%"></i></div></td></tr>' +
+        '<tr class="ap-detail-row" id="ieed_' + i + '" style="display:none">' +
+        '<td></td><td colspan="4">' + ieeeDetailHtml(c) + '</td></tr>'
+      ).join("") + '</table>';
+    $("ieeeScanOut").querySelectorAll(".ieee-row").forEach(el => {
+      el.onclick = () => toggleIeeeDetail(el.dataset.idx);
+    });
+  } catch (e) {
+    $("ieeeScanOut").innerHTML = '<div class="muted">Survey failed.</div>';
+  } finally {
+    clearScanBusy("ieeeScanBtn");
   }
 }
 

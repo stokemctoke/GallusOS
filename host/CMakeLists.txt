@@ -16,6 +16,7 @@ set(HOST_MODULES
     system_info
     wifi_scan
     ble_scan
+    ieee802154_scan
 )
 
 set(HOST_MODULE_SOURCES "")
@@ -79,6 +80,7 @@ add_library(gallus_host_services STATIC
     mock/gpio.cpp
     mock/wifi_service.cpp
     mock/ble_service.cpp
+    mock/ieee802154_service.cpp
     ${GALLUS_ROOT}/components/gallus_services/src/config_service.cpp
     ${GALLUS_ROOT}/components/gallus_services/src/gpio_service.cpp
 )

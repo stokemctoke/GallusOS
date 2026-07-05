@@ -3,6 +3,46 @@
 All notable changes to GallusOS are documented here. The project follows
 [Semantic Versioning](https://semver.org/) for firmware and module manifests.
 
+## [0.1.4] — 2026-07-05
+
+Radio release: discovery for all three of the ESP32-C5's radios, each an
+on-demand module in the dashboard's Modules dropdown with a click-to-expand
+detail panel. Heavy radio stacks are brought up only for a scan and torn down
+after, so they cost RAM only while scanning.
+
+### Scanners
+
+- **WiFi scan detail** ([#26]) — clicking an SSID expands full AP detail:
+  security/auth mode, pairwise + group cipher, PHY generation (Wi‑Fi 4/5/6),
+  bandwidth, secondary channel, WPS, FTM, country, and vendor OUI. All device
+  strings are HTML-escaped (the scan result is attacker-influenced).
+- **BLE scanner** (`ble_scan`, [#27]) — surveys Bluetooth 5.0 LE advertisements
+  (the C5 has no Bluetooth Classic): address/type, RSSI, name, vendor (company
+  ID), service UUIDs, connectable, TX power. NimBLE is brought up on demand and
+  torn down after each scan (~40 KB reclaimed); coexists with WiFi.
+- **802.15.4 energy survey** (`ieee802154_scan`, [#28]) — a WiFi-safe energy map
+  of the 16 Zigbee/Thread/Matter channels (11–26), showing where 2.4 GHz
+  802.15.4 activity is. Energy detect only, so the shared radio is never parked
+  away from WiFi long enough to drop the dashboard.
+
+### Framework
+
+- `ModuleContext` gains `ble` and `ieee802154` services; the manifest generator
+  accepts them as required services.
+- The XSS-safe rendering pattern (HTML escaping + data-attribute delegated
+  handlers) is applied across all scan tables and the file list.
+
+### Security review carried over from v0.1.3
+
+All 25 findings from the July 2026 reviews remain fixed (see 0.1.2 / 0.1.3),
+including constant-time API-token comparison and the reboot-free token
+enforcement.
+
+[0.1.4]: https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.4
+[#26]: https://github.com/stokemctoke/GallusOS/issues/26
+[#27]: https://github.com/stokemctoke/GallusOS/issues/27
+[#28]: https://github.com/stokemctoke/GallusOS/issues/28
+
 ## [0.1.3] — 2026-07-05
 
 Security follow-up to v0.1.2, driven by a field report that the API token

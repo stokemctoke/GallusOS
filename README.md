@@ -5,7 +5,7 @@
 
 # GallusOS: A Modular Embedded Operating Environment
 
-**Current release:** [v0.1.3](https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.3) — security follow-up: API token now enforced without a reboot, dashboard XSS fixed, token confirmation field, and constant-time token comparison.
+**Current release:** [v0.1.4](https://github.com/stokemctoke/GallusOS/releases/tag/v0.1.4) — all three C5 radios: WiFi scan detail, a BLE scanner, and an 802.15.4 (Zigbee/Thread) energy survey, each an on-demand module in the dashboard.
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 

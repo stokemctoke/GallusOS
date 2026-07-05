@@ -5,8 +5,8 @@
 
 #define GALLUS_VERSION_MAJOR 0
 #define GALLUS_VERSION_MINOR 1
-#define GALLUS_VERSION_PATCH 3
-#define GALLUS_VERSION_STRING "0.1.3"
+#define GALLUS_VERSION_PATCH 4
+#define GALLUS_VERSION_STRING "0.1.4"
 
 namespace gallus {
 

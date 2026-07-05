@@ -4,21 +4,23 @@ On-demand IEEE 802.15.4 survey for the XIAO ESP32-C5 — the radio under
 **Zigbee, Thread and Matter-over-Thread**, an IoT ecosystem invisible to
 WiFi and BLE scans.
 
-The survey sweeps all 16 channels (11–26). For each it measures channel
-**energy** and does a brief **promiscuous capture** to enumerate the
-**networks (PAN IDs)** and **device addresses** heard, plus which MAC
-frame types are present (beacon / data / ack / command). Payloads are
-network-key encrypted, so this reports **presence and metadata, not
-decoded traffic** — the same information a Zigbee/Thread sniffer surfaces
-before you have the network key.
+The survey sweeps all 16 channels (11–26) and measures **energy** on
+each — an activity map that shows *where* 802.15.4 traffic is (strong
+energy on channels 15/20/25 points at a nearby Zigbee/Thread network).
+This is the WiFi-safe mode: it coexists with the dashboard connection.
+
+Enumerating the actual **networks (PAN IDs)** and **device addresses**
+requires promiscuous frame capture, which parks the shared 2.4 GHz radio
+away from WiFi long enough to drop the dashboard — so it is deferred to a
+future opt-in "deep capture" mode rather than the live survey. (The
+capture/parse code is present but dormant.)
 
 ## Heap & radio model
 
 The 802.15.4 radio is brought up only for the survey and torn down after
-(`Ieee802154Service`), so it costs RAM only while scanning. It shares the
-2.4 GHz radio with WiFi/BLE via the coexistence arbiter and is never up
-at the same time as the BLE stack (each is on-demand), so the dashboard
-connection is preserved.
+(`Ieee802154Service`), so it costs RAM only while scanning. Energy detect
+tunes the shared radio away from WiFi only microseconds at a time, so the
+survey coexists with the dashboard connection.
 
 ## Usage
 

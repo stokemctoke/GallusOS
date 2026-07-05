@@ -46,7 +46,18 @@ public:
     static constexpr uint8_t kChannelMin = 11;
     static constexpr uint8_t kChannelMax = 26;
     static constexpr size_t kChannelCount = 16;
-    static constexpr uint32_t kDefaultDwellMs = 120;
+
+    // Energy-scan mode: a handful of quick (~128 us) energy-detect
+    // samples per channel, peak-held. The radio is tuned away from WiFi
+    // only microseconds at a time, so the survey coexists with the
+    // dashboard connection (unlike a long promiscuous dwell, which
+    // monopolises the shared 2.4 GHz radio and breaks WiFi).
+    static constexpr int kEnergySamples = 6;
+    static constexpr uint32_t kEnergyDurationSymbols = 8;  // ~128 us
+
+    // Reserved for a future opt-in "deep capture" mode that enumerates
+    // PAN IDs / devices via promiscuous frame capture (disrupts WiFi).
+    static constexpr uint32_t kDefaultDwellMs = 0;
     static constexpr uint32_t kMaxDwellMs = 500;
 
     static constexpr uint8_t kTypeBeacon = 1 << 0;

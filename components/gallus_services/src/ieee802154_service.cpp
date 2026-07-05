@@ -130,15 +130,9 @@ void Ieee802154Service::onEnergyDone(int8_t power) {
 }
 
 Result<size_t> Ieee802154Service::scan(ChannelRecord* out, size_t max,
-                                       uint32_t dwell_ms) {
+                                       uint32_t /*dwell_ms*/) {
     if (out == nullptr || max == 0) {
         return Error::InvalidArg;
-    }
-    if (dwell_ms == 0) {
-        dwell_ms = kDefaultDwellMs;
-    }
-    if (dwell_ms > kMaxDwellMs) {
-        dwell_ms = kMaxDwellMs;
     }
 
     bool expected = false;
@@ -162,9 +156,11 @@ Result<size_t> Ieee802154Service::scan(ChannelRecord* out, size_t max,
     }
 
     s_active = this;
-    (void)esp_ieee802154_set_promiscuous(true);
-    (void)esp_ieee802154_set_rx_when_idle(true);
 
+    // Energy scan only: sample each channel a few times (peak-hold) with
+    // sub-millisecond energy detects. No promiscuous receive and no long
+    // per-channel dwell, so the shared 2.4 GHz radio is never parked away
+    // from WiFi long enough to drop the dashboard connection.
     size_t written = 0;
     for (uint8_t ch = kChannelMin; ch <= kChannelMax && written < max; ++ch) {
         ChannelRecord& rec = out[written];
@@ -172,23 +168,22 @@ Result<size_t> Ieee802154Service::scan(ChannelRecord* out, size_t max,
         rec.channel = ch;
         rec.energy_dbm = -128;
         rec.best_rssi = -128;
-        current_ = &rec;
 
         (void)esp_ieee802154_set_channel(ch);
 
-        // Energy detect: ~8 symbols (128 us) window, result via callback.
-        energy_result_ = -128;
-        if (esp_ieee802154_energy_detect(8) == ESP_OK) {
-            if (xSemaphoreTake(energy_sem_, pdMS_TO_TICKS(50)) == pdTRUE) {
-                rec.energy_dbm = energy_result_;
+        int8_t peak = -128;
+        for (int s = 0; s < kEnergySamples; ++s) {
+            energy_result_ = -128;
+            if (esp_ieee802154_energy_detect(kEnergyDurationSymbols) ==
+                ESP_OK) {
+                if (xSemaphoreTake(energy_sem_, pdMS_TO_TICKS(15)) == pdTRUE) {
+                    if (energy_result_ > peak) {
+                        peak = energy_result_;
+                    }
+                }
             }
         }
-
-        // Promiscuous capture: dwell and let onReceive() fill the record.
-        (void)esp_ieee802154_receive();
-        vTaskDelay(pdMS_TO_TICKS(dwell_ms));
-
-        current_ = nullptr;
+        rec.energy_dbm = peak;
         ++written;
     }
 
@@ -198,7 +193,7 @@ Result<size_t> Ieee802154Service::scan(ChannelRecord* out, size_t max,
     energy_sem_ = nullptr;
     scanning_.store(false, std::memory_order_relaxed);
 
-    Log::info(kTag, "survey complete: %u channel(s)",
+    Log::info(kTag, "energy survey complete: %u channel(s)",
               static_cast<unsigned>(written));
     return written;
 }
